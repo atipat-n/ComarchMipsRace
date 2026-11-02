@@ -64,21 +64,22 @@ def build_geometry():
     print(f"wrote web/geometry.js ({len(r.items[0])} + {len(r.items[320])} shapes)")
 
 
-def build_index():
-    """web/page.html (เนื้อหา ใช้เผยแพร่เป็น Artifact) -> web/index.html (เอกสารเต็ม เปิดในเครื่องได้เลย)"""
-    body = (ROOT / "web" / "page.html").read_text(encoding="utf-8")
+def build_index(folder):
+    """<folder>/page.html (เนื้อหา ใช้เผยแพร่เป็น Artifact) -> <folder>/index.html (เอกสารเต็ม เปิดในเครื่องได้เลย)"""
+    body = (ROOT / folder / "page.html").read_text(encoding="utf-8")
     html = ('<!doctype html>\n<html lang="th">\n<head>\n<meta charset="utf-8">\n'
             '<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">\n'
-            '<!-- สร้างโดย tools/build_web.py จาก web/page.html ห้ามแก้ไฟล์นี้ -->\n'
+            f'<!-- สร้างโดย tools/build_web.py จาก {folder}/page.html ห้ามแก้ไฟล์นี้ -->\n'
             '</head>\n<body>\n' + body + '\n</body>\n</html>\n')
-    (ROOT / "web" / "index.html").write_text(html, encoding="utf-8")
-    print("wrote web/index.html")
+    (ROOT / folder / "index.html").write_text(html, encoding="utf-8")
+    print(f"wrote {folder}/index.html")
 
 
 def main():
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     build_geometry()
-    build_index()
+    build_index("web")
+    build_index("web-live")
     progs = []
     for group, label, paths in GROUPS:
         for p in paths:

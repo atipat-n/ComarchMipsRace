@@ -1,6 +1,8 @@
 # CPU Race: Single-cycle vs Multicycle MIPS บน Nexys A7-100T
 
-**เว็บ CPU Race Lab:** ดับเบิลคลิก [`web/index.html`](web/index.html) (ไม่ต้องต่อเน็ต) ดู single vs multi แข่งกัน, บทเรียน, เขียนโปรแกรม, เลขฐาน, แบบฝึก และวิธีตั้งสวิตช์บนบอร์ด
+**เว็บ CPU Race Lab:** ดับเบิลคลิก [`web/index.html`](web/index.html) (ไม่ต้องต่อเน็ต ไม่ต้องมีบอร์ด) ดู single vs multi แข่งกัน, บทเรียน, เขียนโปรแกรม, เลขฐาน, แบบฝึก และวิธีตั้งสวิตช์บนบอร์ด
+
+**เว็บ CPU Race Live:** ดับเบิลคลิก [`web-live/index.html`](web-live/index.html) (หรือ `live.bat`) ต่อบอร์ดผ่าน USB แล้วสั่งงาน/ดูสถานะบอร์ดจริงจากเว็บ ถ้าไม่ได้เชื่อมจะขึ้น DISCONNECTED (คู่มือ `docs/manual.md` หัวข้อ 6.10)
 
 | อ่านอะไร | เมื่อไร |
 |---|---|

@@ -13,6 +13,8 @@ module race_ctrl #(
     input      [2:0]  speed,
     input             step_pulse,
     input             run_toggle,
+    input             run_set,      // จาก UART: เริ่มวิ่ง (ไม่สลับ)
+    input             run_clr,      // จาก UART: หยุด
     input             done_s,
     input             done_m,
     output reg        en_s,
@@ -82,6 +84,8 @@ module race_ctrl #(
             running  <= 1'b0;
         end else begin
             if (run_toggle && run_mode) running <= ~running;
+            if (run_set && run_mode)    running <= 1'b1;
+            if (run_clr)                running <= 1'b0;
             if (all_done || !run_mode) running <= 1'b0;
 
             if (run_mode && running) presc <= (presc + 32'd1 >= presc_of(speed)) ? 32'd0 : presc + 32'd1;

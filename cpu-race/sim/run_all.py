@@ -207,6 +207,8 @@ def main(argv):
         fails += run_race_tests(iverilog, vvp)
     if not argv:
         fails += run_web_tests()
+    if cores_ok and not argv:
+        fails += run_uart_tests()
 
     print("-" * 60)
     print("ALL PASS" if fails == 0 else f"{fails} FAIL")
@@ -225,6 +227,20 @@ def run_web_tests():
     print(f"[{'PASS' if ok else 'FAIL'}] web/engine.js เทียบกับ asm/ref_model/RTL ({r.stdout.count('[PASS]')} รายการ)")
     if not ok:
         print("\n".join(l for l in r.stdout.splitlines() if "FAIL" in l))
+    return 0 if ok else 1
+
+
+def run_uart_tests():
+    """web-live/protocol.js -> top.v ผ่าน UART -> protocol.js (ต้องมี Node.js)"""
+    node = shutil.which("node")
+    if not node:
+        print("[skip] ไม่พบ node: ข้ามการทดสอบ UART")
+        return 0
+    r = subprocess.run([node, str(ROOT / "sim" / "test_uart.js")], capture_output=True, text=True, encoding="utf-8")
+    ok = r.returncode == 0
+    print(f"[{'PASS' if ok else 'FAIL'}] UART: เว็บ web-live/protocol.js คุยกับ top.v ({r.stdout.count('[PASS]')} รายการ)")
+    if not ok:
+        print("\n".join(l for l in r.stdout.splitlines() if "FAIL" in l or "TIMEOUT" in l))
     return 0 if ok else 1
 
 

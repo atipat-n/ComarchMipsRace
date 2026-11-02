@@ -1,0 +1,327 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!-- สร้างโดย tools/build_web.py จาก web-live/page.html ห้ามแก้ไฟล์นี้ -->
+</head>
+<body>
+<title>CPU Race Live</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: แถบสถานะการเชื่อมต่อบนสุด (ใหญ่ เห็นชัด) → แผงสั่งงาน → สนามแข่งสองเลนแบบเดียวกับ CPU Race Lab (web/) แต่ข้อมูลมาจากบอร์ดจริง */
+:root {
+  --bg: #edf1f6; --panel: #ffffff; --panel-2: #f5f7fb; --ink: #14213a; --muted: #5a6a82; --line: #d4dce7;
+  --accent: #23338a; --single: #d96400; --single-soft: #ffe8d1; --multi: #0583b0; --multi-soft: #d6f1fb;
+  --wire-off: #c3ccd9; --wire-static: #8d9ab0; --good: #16824c; --bad: #c2352b; --warn: #a8700f;
+  --seg-on: #e2362a; --seg-off: rgba(226, 54, 42, 0.10); --seg-bg: #1b1f27;
+  --live: #16824c; --dead: #c2352b; --wait: #a8700f;
+  --f-display: "Chakra Petch", "Leelawadee UI", Tahoma, sans-serif;
+  --f-body: "IBM Plex Sans Thai", "Leelawadee UI", "Segoe UI", Tahoma, sans-serif;
+  --f-mono: "JetBrains Mono", Consolas, "Courier New", monospace;
+  --r: 10px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0b1120; --panel: #121a2e; --panel-2: #0e1528; --ink: #e3e9f4; --muted: #8e9cb4; --line: #243049;
+    --accent: #9aa9ff; --single: #ff9a2e; --single-soft: #3a2711; --multi: #3cc8f5; --multi-soft: #0d3243;
+    --wire-off: #2c3853; --wire-static: #6b7a97; --good: #4bc98a; --bad: #ff6e61; --warn: #e6b04c;
+    --seg-on: #ff4a3d; --seg-off: rgba(255, 74, 61, 0.10); --seg-bg: #07090e;
+    --live: #4bc98a; --dead: #ff6e61; --wait: #e6b04c;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0b1120; --panel: #121a2e; --panel-2: #0e1528; --ink: #e3e9f4; --muted: #8e9cb4; --line: #243049;
+  --accent: #9aa9ff; --single: #ff9a2e; --single-soft: #3a2711; --multi: #3cc8f5; --multi-soft: #0d3243;
+  --wire-off: #2c3853; --wire-static: #6b7a97; --good: #4bc98a; --bad: #ff6e61; --warn: #e6b04c;
+  --seg-on: #ff4a3d; --seg-off: rgba(255, 74, 61, 0.10); --seg-bg: #07090e;
+  --live: #4bc98a; --dead: #ff6e61; --wait: #e6b04c;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { background: var(--bg); color: var(--ink); }
+body { font-family: var(--f-body); font-size: 15px; line-height: 1.6; margin: 0; }
+.wrap { max-width: 1280px; margin: 0 auto; padding-inline: 16px; padding-block: 16px 48px; display: grid; gap: 16px; }
+h1, h2, h3 { font-family: var(--f-display); line-height: 1.25; text-wrap: balance; margin: 0; }
+h2 { font-size: 1.2rem; }
+h3 { font-size: 1rem; }
+p { margin: 0; }
+code, .mono { font-family: var(--f-mono); font-size: 0.92em; }
+a { color: var(--accent); }
+button, select, input, textarea { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.muted { color: var(--muted); }
+.small { font-size: 0.85rem; }
+.num { font-variant-numeric: tabular-nums; }
+
+.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); }
+.top-inner { max-width: 1280px; margin: 0 auto; padding: 10px 16px; display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; }
+.brand { display: flex; align-items: baseline; gap: 10px; margin-right: auto; flex-wrap: wrap; }
+.brand h1 { font-size: 1.35rem; }
+.brand h1 .s { color: var(--single); }
+.brand h1 .m { color: var(--multi); }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--panel); }
+.seg button { border: 0; background: transparent; padding: 4px 10px; cursor: pointer; font-size: 0.82rem; font-family: var(--f-mono); }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--panel); }
+
+/* ---------- สถานะการเชื่อมต่อ ---------- */
+.conn { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.pill { display: inline-flex; align-items: center; gap: 8px; padding: 6px 14px; border-radius: 999px; font-family: var(--f-display); font-weight: 700; letter-spacing: 0.08em; font-size: 0.95rem; border: 2px solid currentColor; }
+.pill .dot { width: 10px; height: 10px; border-radius: 50%; background: currentColor; }
+.pill.dead { color: var(--dead); }
+.pill.wait { color: var(--wait); }
+.pill.wait .dot { animation: blink 0.8s steps(2) infinite; }
+.pill.live { color: var(--live); }
+.pill.live .dot { box-shadow: 0 0 8px currentColor; }
+@keyframes blink { 50% { opacity: 0.2; } }
+@media (prefers-reduced-motion: reduce) { .pill.wait .dot { animation: none; } }
+
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); padding: 16px; min-width: 0; }
+.grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+@media (max-width: 900px) { .grid2 { grid-template-columns: 1fr; } }
+.row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.btn { border: 1px solid var(--line); background: var(--panel); border-radius: 8px; padding: 6px 12px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; font-size: 0.9rem; }
+.btn:hover:not(:disabled) { border-color: var(--ink); }
+.btn.primary { background: var(--ink); color: var(--panel); border-color: var(--ink); }
+.btn.big { padding: 10px 18px; font-size: 1rem; font-family: var(--f-display); font-weight: 600; }
+.btn:disabled { opacity: 0.4; cursor: default; }
+select, input[type="text"], input[type="number"], textarea { background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; }
+.chip { display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px; border-radius: 999px; font-size: 0.8rem; border: 1px solid var(--line); background: var(--panel-2); }
+.chip.s { border-color: var(--single); color: var(--single); background: var(--single-soft); }
+.chip.m { border-color: var(--multi); color: var(--multi); background: var(--multi-soft); }
+.chip.good { border-color: var(--good); color: var(--good); }
+.chip.bad { border-color: var(--bad); color: var(--bad); }
+.chip.warn { border-color: var(--warn); color: var(--warn); }
+.label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+
+/* ---------- แผงตอนยังไม่เชื่อม ---------- */
+.offline { border: 2px dashed var(--dead); display: grid; gap: 12px; }
+.offline h2 { color: var(--dead); font-size: 1.6rem; letter-spacing: 0.06em; }
+.offline ol { margin: 0; padding-left: 1.3rem; display: grid; gap: 6px; max-width: 75ch; }
+.board-area { position: relative; display: grid; gap: 16px; }
+.board-area.off > :not(.veil) { filter: grayscale(1); opacity: 0.35; pointer-events: none; }
+.veil { display: none; }
+.board-area.off .veil { display: grid; position: absolute; inset: 0; place-items: start center; padding-top: 120px; z-index: 5; pointer-events: none; }
+.veil span { font-family: var(--f-display); font-weight: 700; font-size: clamp(1.6rem, 5vw, 3rem); letter-spacing: 0.2em; color: var(--dead); border: 3px solid var(--dead); padding: 6px 22px; border-radius: 10px; background: var(--panel); transform: rotate(-4deg); }
+
+/* ---------- สั่งงาน ---------- */
+.controls { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+@media (max-width: 1000px) { .controls { grid-template-columns: 1fr; } }
+.ctl { display: grid; gap: 8px; align-content: start; min-width: 0; }
+.ovline { display: flex; gap: 10px; align-items: center; }
+.ovline input[type="range"] { flex: 1; accent-color: var(--ink); }
+.ovval { font-family: var(--f-display); font-size: 1.6rem; font-weight: 700; min-width: 2ch; text-align: right; }
+.src { font-size: 0.78rem; color: var(--muted); }
+
+/* ---------- สนามแข่ง ---------- */
+.sb-top { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px; align-items: center; }
+.lane { display: grid; grid-template-columns: 92px minmax(0, 1fr) auto; gap: 12px; align-items: center; }
+@media (max-width: 640px) { .lane { grid-template-columns: 70px minmax(0, 1fr); } .lane .lane-r { grid-column: 1 / -1; } }
+.lane-name { font-family: var(--f-display); font-weight: 700; }
+.lane.s .lane-name { color: var(--single); }
+.lane.m .lane-name { color: var(--multi); }
+.track { position: relative; height: 22px; border-radius: 6px; background: var(--panel-2); border: 1px solid var(--line); overflow: hidden; }
+.track .fill { position: absolute; inset: 0 auto 0 0; width: 0; }
+.lane.s .fill { background: var(--single); }
+.lane.m .fill { background: var(--multi); }
+.track .ghost { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--ink); opacity: 0.35; }
+.lane-r { display: flex; gap: 10px; align-items: center; font-size: 0.85rem; white-space: nowrap; }
+.badge { font-family: var(--f-display); font-weight: 700; letter-spacing: 0.06em; padding: 1px 8px; border-radius: 6px; font-size: 0.8rem; }
+.badge.win { background: var(--good); color: var(--panel); }
+.badge.tie { background: var(--warn); color: var(--panel); }
+.badge.fin { border: 1px solid var(--line); color: var(--muted); }
+.badge.run { color: var(--muted); }
+.seven { display: inline-flex; gap: 3px; padding: 6px 8px; background: var(--seg-bg); border-radius: 6px; }
+.seven svg { width: 16px; height: 28px; display: block; }
+.seven .on { fill: var(--seg-on); }
+.seven .off { fill: var(--seg-off); }
+
+.core { display: grid; gap: 10px; align-content: start; }
+.core-head { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; justify-content: space-between; }
+.core.s h2 { color: var(--single); }
+.core.m h2 { color: var(--multi); }
+.next-ins { font-family: var(--f-mono); font-size: 0.9rem; background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; overflow-x: auto; white-space: nowrap; }
+.next-ins .lbl { font-family: var(--f-body); color: var(--muted); font-size: 0.8rem; margin-right: 8px; }
+.dp { width: 100%; height: auto; display: block; background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; }
+.dp text { font-family: var(--f-mono); font-size: 11px; fill: var(--ink); }
+.dp .box { fill: var(--panel); stroke: var(--wire-static); stroke-width: 1.6; }
+.dp .box.hot-s { stroke: var(--single); stroke-width: 2.4; fill: var(--single-soft); }
+.dp .box.hot-m { stroke: var(--multi); stroke-width: 2.4; fill: var(--multi-soft); }
+.dp .box.cold { stroke: var(--wire-off); }
+.dp .mux { fill: var(--panel); stroke: var(--wire-static); stroke-width: 1.4; }
+.dp .w { fill: none; stroke-width: 2.2; stroke-linejoin: round; stroke-linecap: round; }
+.dp .w.static { stroke: var(--wire-static); }
+.dp .w.off { stroke: var(--wire-off); }
+.dp .w.on-s { stroke: var(--single); stroke-width: 2.8; }
+.dp .w.on-m { stroke: var(--multi); stroke-width: 2.8; }
+.dp .flow { fill: none; stroke-width: 2.8; stroke-dasharray: 3 9; stroke-linecap: round; stroke: var(--panel); opacity: 0.85; animation: flow 0.9s linear infinite; }
+@keyframes flow { to { stroke-dashoffset: -12; } }
+@media (prefers-reduced-motion: reduce) { .dp .flow { animation: none; display: none; } }
+.leds { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; }
+.led { width: 10px; height: 10px; border-radius: 50%; background: var(--wire-off); }
+.led.on { background: var(--good); box-shadow: 0 0 6px var(--good); }
+.regs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; }
+@media (max-width: 520px) { .regs { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.regs.bin { grid-template-columns: minmax(0, 1fr); }
+.reg { display: flex; justify-content: space-between; gap: 6px; font-family: var(--f-mono); font-size: 0.78rem; padding: 2px 6px; border-radius: 5px; background: var(--panel-2); min-width: 0; overflow: hidden; }
+.reg span:first-child { color: var(--muted); }
+.reg span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.reg.changed { outline: 2px solid var(--accent); }
+
+.verify { display: grid; gap: 6px; }
+.vrow { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 6px; font-size: 0.9rem; }
+.ok { color: var(--good); font-weight: 600; }
+.err { color: var(--bad); font-weight: 600; }
+.warnc { color: var(--warn); font-weight: 600; }
+.editor { width: 100%; min-height: 220px; font-family: var(--f-mono); font-size: 0.85rem; line-height: 1.45; resize: vertical; }
+.console { font-family: var(--f-mono); font-size: 0.75rem; max-height: 220px; overflow: auto; background: var(--panel-2); border-radius: 8px; padding: 8px; white-space: pre-wrap; word-break: break-all; }
+.console .tx { color: var(--accent); }
+.console .rx { color: var(--good); }
+.console .er { color: var(--bad); }
+.stats { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 0.8rem; color: var(--muted); }
+.foot { color: var(--muted); font-size: 0.8rem; }
+</style>
+
+<header class="top">
+  <div class="top-inner">
+    <div class="brand">
+      <h1>CPU Race Live <span class="s">●</span><span class="m">●</span></h1>
+      <a class="small" href="../web/index.html#race">← CPU Race Lab (ตัวจำลอง ไม่ต้องมีบอร์ด)</a>
+    </div>
+    <div class="conn">
+      <span class="pill dead" id="pill" role="status" aria-live="polite"><span class="dot"></span><span id="pill-text">DISCONNECTED</span></span>
+      <button class="btn primary" type="button" id="b-connect">เชื่อมต่อบอร์ด</button>
+      <button class="btn" type="button" id="b-disconnect" hidden>ตัดการเชื่อมต่อ</button>
+    </div>
+    <div class="seg" role="group" aria-label="เลขฐาน" id="base-seg">
+      <button type="button" data-base="hex" aria-pressed="true">HEX</button>
+      <button type="button" data-base="dec" aria-pressed="false">DEC</button>
+      <button type="button" data-base="sdec" aria-pressed="false">±DEC</button>
+      <button type="button" data-base="bin" aria-pressed="false">BIN</button>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <section class="card offline" id="offline">
+    <h2 id="off-title">DISCONNECTED</h2>
+    <p id="off-reason">ยังไม่ได้เชื่อมต่อกับบอร์ด</p>
+    <ol id="off-steps">
+      <li>ต่อสาย micro-USB จากบอร์ด Nexys A7 เข้าคอม (เส้นเดียวกับที่ใช้โหลด bitstream) แล้วเปิดสวิตช์บอร์ด</li>
+      <li>บอร์ดต้องมี bitstream รุ่นที่มี UART (build หลังวันที่ 2 พ.ย. 2569: <code>fpga\run.bat top program</code>)</li>
+      <li>เปิดหน้านี้ด้วย <b>Chrome</b> หรือ <b>Edge</b> บนคอม (Firefox / Safari / มือถือ ยังไม่รองรับ Web Serial)</li>
+      <li>กด <b>เชื่อมต่อบอร์ด</b> แล้วเลือกพอร์ตที่ชื่อมี <b>USB Serial</b> / <b>FTDI</b> / <b>Digilent</b> (ถ้ามีสองพอร์ตให้ลองตัวที่เลขมากกว่า)</li>
+    </ol>
+    <p class="small muted">ไม่มีบอร์ดอยู่ใกล้ๆ? ใช้ <a href="../web/index.html#race">CPU Race Lab</a> ซึ่งจำลองการแข่งแบบเดียวกันทุกจังหวะ</p>
+  </section>
+
+  <div class="board-area off" id="board-area">
+    <div class="veil" aria-hidden="true"><span id="veil-text">DISCONNECTED</span></div>
+
+    <div class="card controls">
+      <div class="ctl">
+        <span class="label">โปรแกรมในบอร์ด</span>
+        <div class="row">
+          <button class="btn" type="button" id="b-progA">โหลด A (บวก 1..10)</button>
+          <button class="btn" type="button" id="b-progB">โหลด B (รวม array)</button>
+        </div>
+        <p class="small" id="prog-now">-</p>
+        <p class="src">หรือส่งโปรแกรมของคุณเองที่แผง "ส่งโปรแกรมลงบอร์ด" ด้านล่าง</p>
+      </div>
+      <div class="ctl">
+        <span class="label">overhead (ov)</span>
+        <div class="ovline"><input type="range" id="ov" min="0" max="15" value="0" aria-label="ov"><span class="ovval num" id="ov-val">0</span></div>
+        <label class="small"><input type="checkbox" id="ov-sw" checked> ใช้สวิตช์ SW3–0 บนบอร์ด</label>
+        <p class="src" id="ov-src">-</p>
+      </div>
+      <div class="ctl">
+        <span class="label">ควบคุมการแข่ง</span>
+        <div class="row">
+          <button class="btn" type="button" id="b-reset" title="เวลากลับเป็น 0 ใช้โปรแกรมเดิม">⟲ เริ่มใหม่</button>
+          <button class="btn primary" type="button" id="b-step">▸ ทีละจังหวะ</button>
+          <button class="btn" type="button" id="b-run">▶ วิ่ง</button>
+          <button class="btn" type="button" id="b-pause">⏸ หยุด</button>
+        </div>
+        <div class="row">
+          <label class="small" for="speed">ความเร็ว</label>
+          <select id="speed">
+            <option value="0">20 หน่วย/วิ</option><option value="1">50</option><option value="2">100</option>
+            <option value="3" selected>200</option><option value="4">400</option><option value="5">1000</option>
+            <option value="6">4000</option><option value="7">เร็วสุด</option>
+          </select>
+          <label class="small"><input type="checkbox" id="mode-sw" checked> ใช้สวิตช์ SW15, SW14–12</label>
+        </div>
+        <p class="src" id="mode-src">-</p>
+      </div>
+    </div>
+
+    <div class="card" style="display:grid;gap:10px">
+      <div class="sb-top">
+        <div style="display:grid;gap:2px"><div class="seven" id="seg-time"></div><small class="muted">TIME บนบอร์ด · <span class="num" id="time-dec">0</span> หน่วย</small></div>
+        <div class="row">
+          <span class="chip" id="sync-chip">-</span>
+          <span class="chip" id="led-chip">-</span>
+        </div>
+      </div>
+      <div class="lane s"><span class="lane-name">SINGLE</span><div class="track"><div class="fill" id="fill-s"></div><div class="ghost" id="ghost-s"></div></div><div class="lane-r num"><span id="t-s">0</span><span class="muted" id="r-s">0</span><span class="badge run" id="st-s">-</span></div></div>
+      <div class="lane m"><span class="lane-name">MULTI</span><div class="track"><div class="fill" id="fill-m"></div><div class="ghost" id="ghost-m"></div></div><div class="lane-r num"><span id="t-m">0</span><span class="muted" id="r-m">0</span><span class="badge run" id="st-m">-</span></div></div>
+    </div>
+
+    <div class="grid2">
+      <div class="card core s">
+        <div class="core-head"><h2>Single-cycle (บอร์ด)</h2><span class="chip s">CPI = 1</span></div>
+        <div class="next-ins"><span class="lbl">คำสั่งที่ PC</span><span id="next-s">-</span></div>
+        <svg class="dp" id="dp-s" viewBox="0 14 320 296" role="img" aria-label="datapath single-cycle จากบอร์ด"></svg>
+        <div class="regs" id="regs-s"></div>
+      </div>
+      <div class="card core m">
+        <div class="core-head"><h2>Multicycle (บอร์ด)</h2><span class="chip m mono" id="state-m">-</span><div class="leds" id="leds-m" title="LED11–0 บนบอร์ด"></div></div>
+        <div class="next-ins"><span class="lbl">คำสั่งใน IR</span><span id="next-m">-</span></div>
+        <svg class="dp" id="dp-m" viewBox="0 14 320 296" role="img" aria-label="datapath multicycle จากบอร์ด"></svg>
+        <div class="regs" id="regs-m"></div>
+      </div>
+    </div>
+
+    <div class="grid2">
+      <div class="card verify">
+        <h3>ตรวจผลบนบอร์ดกับตัวจำลอง</h3>
+        <p class="small muted">เว็บจำลองโปรแกรมเดียวกันด้วย engine ของ CPU Race Lab แล้วเทียบกับค่าที่อ่านจากบอร์ดทุกครั้ง</p>
+        <div id="verify"></div>
+      </div>
+      <div class="card" style="display:grid;gap:8px">
+        <h3>ส่งโปรแกรมลงบอร์ด</h3>
+        <div class="row">
+          <label class="small muted" for="send-pick">เริ่มจาก</label>
+          <select id="send-pick"></select>
+        </div>
+        <textarea class="editor" id="send-src" spellcheck="false" aria-label="assembly ที่จะส่งลงบอร์ด"></textarea>
+        <div class="row">
+          <button class="btn primary" type="button" id="b-send">แปลงแล้วส่งลงบอร์ด</button>
+          <span class="small" id="send-status"></span>
+        </div>
+      </div>
+    </div>
+
+    <details class="card">
+      <summary><b>ข้อมูลที่รับส่ง</b> <span class="small muted">(สำหรับ debug)</span></summary>
+      <div class="stats" id="stats" style="margin:8px 0"></div>
+      <div class="console" id="console" aria-live="off"></div>
+    </details>
+  </div>
+
+  <p class="foot">CPU Race Live คุยกับบอร์ดผ่าน Web Serial ที่ 115200 baud ตามโปรโตคอลใน <code>docs/protocol.md</code> · ภาพ datapath ตัวถอดคำสั่ง และตัวจำลองใช้ร่วมกับ <a href="../web/index.html">CPU Race Lab</a></p>
+</main>
+
+<script src="../web/engine.js"></script>
+<script src="../web/programs.js"></script>
+<script src="../web/geometry.js"></script>
+<script src="protocol.js"></script>
+<script src="live.js"></script>
+
+</body>
+</html>

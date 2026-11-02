@@ -17,10 +17,12 @@ module tb_top;
     wire [7:0]  an;
     wire [3:0]  vr, vg, vb;
     wire        hs, vs;
+    wire        uart_out;
 
     top #(.CLK_HZ(1000), .DEBOUNCE_N(4)) dut (
         .CLK100MHZ(clk), .CPU_RESETN(resetn), .SW(sw),
         .BTNC(btnc), .BTNU(btnu), .BTNL(btnl), .BTNR(btnr),
+        .UART_TXD_IN(1'b1), .UART_RXD_OUT(uart_out),
         .LED(led), .CA(ca), .CB(cb), .CC(cc), .CD(cd), .CE(ce), .CF(cf), .CG(cg), .DP(dp), .AN(an),
         .VGA_R(vr), .VGA_G(vg), .VGA_B(vb), .VGA_HS(hs), .VGA_VS(vs)
     );
