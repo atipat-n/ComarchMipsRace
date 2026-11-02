@@ -1,0 +1,19 @@
+# ทุกอย่างที่เครื่องมือสร้างขึ้นอยู่ใน build/
+build/
+
+# Vivado ที่หลุดออกมานอก build/
+.Xil/
+*.jou
+*.log
+*.str
+usage_statistics_webtalk.*
+
+# simulation
+*.vcd
+*.fst
+*.vvp
+*.ppm
+
+# Python
+__pycache__/
+*.pyc
