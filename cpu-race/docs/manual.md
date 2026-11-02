@@ -1,116 +1,142 @@
-# คู่มือการใช้งาน CPU Race
+# 🛠️ คู่มือการใช้งาน CPU Race
 
-> คู่มือนี้บอก **วิธีใช้** เครื่องมือในโปรเจค ถ้ายังไม่รู้ว่า single-cycle / multicycle คืออะไร ให้อ่าน [`tutorial.md`](tutorial.md) ก่อน
-> ทุกคำสั่งในคู่มือนี้ให้รันจากโฟลเดอร์ `D:\Comarch2\Project\cpu-race` (ใน VS Code: เปิดโฟลเดอร์นี้แล้วกด `` Ctrl+` `` เพื่อเปิด terminal)
+> [!NOTE]
+> คู่มือนี้อธิบาย **วิธีใช้งานเครื่องมือทั้งหมดในโปรเจค** ตั้งแต่การจำลองวงจร การเขียนโค้ด Assembly ไปจนถึงการโหลดลงบอร์ด FPGA
+> - หากยังไม่คุ้นเคยว่า Single-cycle และ Multicycle ทำงานอย่างไร แนะนำให้อ่าน [`tutorial.md`](tutorial.md) ก่อน
+> - ทุกคำสั่งในคู่มือนี้ให้รันจากโฟลเดอร์ `cpu-race/` (ใน VS Code สามารถกด `` Ctrl+` `` เพื่อเปิด Terminal ได้ทันที)
+
+---
+
+## 📑 สารบัญ
+
+1. [ภาพรวม: ในโปรเจคมีอะไรบ้าง](#1-ภาพรวม-ในโปรเจคมีอะไรบ้าง)
+2. [การติดตั้งเครื่องมือ (ทำครั้งเดียว)](#2-ติดตั้ง-ทำครั้งเดียว)
+3. [การรันเทสต์ทั้งหมด (`run_all.py`)](#3-รันเทสต์ทั้งหมด)
+4. [การดูโปรแกรมวิ่งทีละ Step (`trace.py` & GTKWave)](#4-ดูโปรแกรมวิ่งทีละ-step-trace)
+5. [การเขียนโปรแกรม Assembly เอง](#5-เขียนโปรแกรม-assembly-เอง)
+6. [การลงบอร์ดจริงและการใช้งานเว็บ (`web/` & `web-live/`)](#6-ลงบอร์ดและใช้งานเว็บ)
+7. [การแก้ปัญหาที่พบบ่อย (Troubleshooting)](#7-แก้ปัญหาที่เจอบ่อย)
+8. [สถานะของแต่ละส่วนในระบบ](#8-สถานะของแต่ละส่วน)
 
 ---
 
 ## 1. ภาพรวม: ในโปรเจคมีอะไรบ้าง
 
-```
+```text
 cpu-race/
-├── docs/        เอกสาร (สเปค, คู่มือ, บทเรียน, wire map)
-├── rtl/         วงจร CPU ที่เขียนด้วย Verilog  ← ของจริงที่จะลงบอร์ด
-│   ├── common/    ชิ้นส่วนที่ใช้ร่วมกัน: ALU, register file, sign-extend
-│   ├── single/    single-cycle CPU
-│   ├── multi/     multicycle CPU + FSM
+├── docs/        เอกสารประกอบ (สเปค, คู่มือ, บทเรียน, สคริปต์เดโม่, wire map, โปรโตคอล)
+├── rtl/         วงจร CPU ที่เขียนด้วย Verilog-2001  ← ของจริงที่สังเคราะห์ลงบอร์ด
+│   ├── common/    ชิ้นส่วนที่ใช้ร่วมกัน: ALU, ALU control, register file, sign-extend
+│   ├── single/    Single-cycle CPU + Main Control
+│   ├── multi/     Multicycle CPU + 12-State FSM
 │   ├── mem/       หน่วยความจำ (LUTRAM), boot ROM, ตัวโหลดโปรแกรม
-│   ├── race/      ตัวคุมการแข่ง (นาฬิการ่วม)
-│   ├── io/        ปุ่ม (debounce), 7-seg
-│   ├── vga/       จอ VGA (timing + วาดภาพ)
-│   ├── top.v        รวมทุกอย่างลงบอร์ด
-│   └── top_smoke.v  วงจรทดสอบบอร์ด (สวิตช์ → LED)
-├── programs/    โปรแกรม assembly ที่จะให้ CPU รัน
-│   ├── tests/     เทสต์ทีละคำสั่ง
+│   ├── race/      ตัวคุมการแข่ง (นาฬิกาเวลาร่วม)
+│   ├── io/        ปุ่มกด (debounce), 7-segment, UART RX/TX/Command
+│   ├── vga/       จอ VGA (timing + 3-layer renderer)
+│   ├── clk_gen.v  แปลงสัญญาณนาฬิกา 100 MHz → 25 MHz
+│   ├── top.v      รวมทุกโมดูลลงบอร์ด
+│   └── top_smoke.v  วงจรทดสอบบอร์ดเบื้องต้น (สวิตช์ → LED, 7-seg นับเลข)
+├── programs/    โปรแกรม MIPS Assembly ที่จะให้ CPU รัน
+│   ├── tests/     เทสต์แยกทีละคำสั่ง (10 ไฟล์)
 │   ├── examples/  ตัวอย่างประกอบบทเรียน
-│   └── demo*.s    โปรแกรมที่จะใช้ตอนนำเสนอ
-├── sim/         ตัวทดสอบ (testbench) และสคริปต์รันเทสต์
-├── tools/       เครื่องมือ Python: assembler, reference model, สร้างไฟล์ขา
-├── fpga/        สคริปต์ Vivado (ใช้ที่เครื่องเพื่อน)
-├── constr/      ไฟล์ขา (.xdc) ของบอร์ด
-├── mem/         ไฟล์ที่ฝังลงชิป: โปรแกรม demo, ฟอนต์, ภาพพื้นหลัง, template ตัวหนังสือ
-└── build/       ไฟล์ที่เครื่องมือสร้างขึ้น ลบทิ้งได้ทุกเมื่อ
+│   └── demo*.s    โปรแกรมที่ใช้แข่งขันตอนนำเสนอ (A และ B)
+├── sim/         ตัวทดสอบ (testbench) และสคริปต์รันเทสต์อัตโนมัติ
+├── tools/       เครื่องมือ Python: assembler, reference model, สร้างภาพจอ, สร้างไฟล์ขา
+├── fpga/        สคริปต์ Vivado Tcl แบบ Non-project mode
+├── constr/      ไฟล์ขาพอร์ต (.xdc) ของบอร์ด Nexys A7-100T
+├── mem/         ไฟล์ข้อมูลที่ฝังลงชิป: โปรแกรม demo, ฟอนต์, ภาพพื้นหลัง, template ตัวหนังสือ
+├── web/         เว็บ CPU Race Lab (ใช้งานแบบ Offline)
+├── web-live/    เว็บ CPU Race Live (เชื่อมต่อบอร์ดผ่าน USB Web Serial)
+└── build/       ไฟล์ชั่วคราวที่เครื่องมือสร้างขึ้น (ลบทิ้งได้ทุกเมื่อ)
 ```
 
-**ลำดับการไหลของงาน:**
+### 🔄 ลำดับการไหลของงานตรวจสอบ (Verification Pipeline)
 
-```
- เขียน .s ──► asm.py ──► .mem (ตัวเลข 512 บรรทัด) ──┬──► ref_model.py   (Python จำลอง: "เฉลย")
-                                                    ├──► single-cycle  (Verilog ใน Icarus)
-                                                    └──► multicycle    (Verilog ใน Icarus)
-                                                              │
-                                     run_all.py เทียบผลทั้งสามทาง ──► PASS / FAIL
+```mermaid
+flowchart LR
+    S["📝 เขียนไฟล์ .s"] --> ASM["⚙️ tools/asm.py"]
+    ASM --> MEM["📄 ไฟล์ .mem<br/>(512 บรรทัด)"]
+    MEM --> REF["1️⃣ ref_model.py<br/>(Python เฉลย)"]
+    MEM --> CSIM["2️⃣ cpuSim V7<br/>(ซิมูเลเตอร์อาจารย์)"]
+    MEM --> SC["3️⃣ Single-cycle<br/>(Verilog ใน Icarus)"]
+    MEM --> MC["4️⃣ Multicycle<br/>(Verilog ใน Icarus)"]
+    REF & CSIM & SC & MC --> RUN["🧪 sim/run_all.py<br/>เทียบผลทั้ง 4 ทาง"]
+    RUN --> RES["✅ PASS / ❌ FAIL"]
 ```
 
 ---
 
 ## 2. ติดตั้ง (ทำครั้งเดียว)
 
-| โปรแกรม | ใช้ทำอะไร | วิธีติดตั้งบน Windows | เช็กว่าลงแล้ว |
+| โปรแกรม | ใช้ทำอะไร | วิธีติดตั้งบน Windows | คำสั่งตรวจสอบ |
 |---|---|---|---|
-| Python 3 | รัน assembler, reference model, สคริปต์เทสต์ | python.org หรือ `winget install Python.Python.3.13` | `python --version` |
-| Icarus Verilog 12 | จำลองวงจร Verilog (simulation) | `winget install Icarus.Verilog` | มีไฟล์ `C:\iverilog\bin\iverilog.exe` |
-| GTKWave | ดู waveform (มากับ Icarus) | มากับข้างบน | `C:\iverilog\gtkwave\bin\gtkwave.exe` |
-| VS Code | แก้ไฟล์ | code.visualstudio.com | – |
-| Vivado 2025.2 | สร้าง bitstream ลงบอร์ด | **ไม่ต้องลง** ใช้เครื่องเพื่อน | – |
+| **Python 3** | รัน Assembler, Reference Model, สคริปต์เทสต์ | [python.org](https://www.python.org/) หรือ `winget install Python.Python.3.13` | `python --version` |
+| **Icarus Verilog 12** | จำลองวงจร Verilog (Simulation) | `winget install Icarus.Verilog` | มีไฟล์ `C:\iverilog\bin\iverilog.exe` |
+| **GTKWave** | เปิดดูคลื่นสัญญาณ (Waveform `.vcd`) | ติดตั้งมาพร้อมกับ Icarus Verilog ด้านบน | `C:\iverilog\gtkwave\bin\gtkwave.exe` |
+| **VS Code** | แก้ไขโค้ดและเปิด Terminal | [code.visualstudio.com](https://code.visualstudio.com/) | – |
+| **Vivado 2025.2** | สังเคราะห์ Bitstream และโหลดลงบอร์ดจริง | ใช้เฉพาะเมื่อต้องการ Build ลงบอร์ด FPGA | `vivado -version` |
 
-> 💡 เครื่องของผู้ใช้หลักลง Icarus แล้ว (2 พ.ย. 2569) ที่ `C:\iverilog`
-> สคริปต์ของเราหา `C:\iverilog\bin` เองได้ แม้ยังไม่ได้เพิ่มเข้า PATH
-
-**ส่วนเสริม VS Code ที่แนะนำ:** "Verilog-HDL/SystemVerilog" (สีโค้ด Verilog), "Python"
+> [!TIP]
+> สคริปต์ Python ในโปรเจคนี้สามารถค้นหา `C:\iverilog\bin` ได้โดยอัตโนมัติ แม้ว่ายังไม่ได้เพิ่มโฟลเดอร์ดังกล่าวเข้าใน `PATH` ของ Windows ก็ตาม
+> **ส่วนเสริม VS Code ที่แนะนำ:** `Verilog-HDL/SystemVerilog` (สำหรับไฮไลต์สีโค้ด Verilog) และ `Python`
 
 ---
 
 ## 3. รันเทสต์ทั้งหมด
 
-```
+```bash
 python sim/run_all.py
 ```
 
-ตัวอย่างผล:
+ตัวอย่างผลลัพธ์:
 
-```
+```text
 [PASS] tb_common (alu, alu_control, regfile, sign_ext)
-[PASS] t_add              retired=7     mc_steps=28    expects=6   single=ref multi=ref
-[PASS] t_lw_sw            retired=12    mc_steps=53    expects=8   single=ref multi=ref
+[PASS] t_add              retired=7     mc_steps=28    expects=6   cpusim=ref single=ref multi=ref
+[PASS] t_lw_sw            retired=12    mc_steps=53    expects=8   cpusim=ref single=ref multi=ref
 ...
 ------------------------------------------------------------
 ALL PASS
 ```
 
-**อ่านผลยังไง:**
+### วิธีอ่านผลการทดสอบ
 
-| ส่วน | ความหมาย |
+| ข้อความแสดงผล | ความหมาย |
 |---|---|
-| `tb_common` | ทดสอบชิ้นส่วนย่อย (ALU ทุก op, register file, ALU control, sign-extend) |
-| `retired=7` | โปรแกรมนี้รันไป 7 คำสั่ง (ไม่นับคำสั่ง halt) |
-| `mc_steps=28` | multicycle ใช้ 28 step (clock) สำหรับโปรแกรมนี้ |
-| `expects=6` | เช็กค่าที่เขียนไว้ในไฟล์ `.s` ผ่าน 6 ข้อ |
-| `single=ref` | single-cycle ให้ผล **ตรงกับเฉลย** ทุก register, ทุก word ใน data memory และใช้ cycle ถูก |
-| `multi=ref` | multicycle ให้ผลตรงกับเฉลย และใช้จำนวน step ตรง |
-| `single!=ref` | **ไม่ตรง** จะมีบรรทัดบอกว่า register ไหนต่าง เช่น `ref: r19 00000001  rtl: r19 00000000` (= `$19` ควรเป็น 1 แต่ได้ 0) |
+| `tb_common` | ทดสอบชิ้นส่วนย่อยระดับโมดูล (`ALU` ทุกคำสั่ง, `Register File`, `ALU Control`, `Sign-Extend`) |
+| `retired=7` | โปรแกรมนี้รันคำสั่งสำเร็จไป 7 คำสั่ง (ไม่นับคำสั่ง `halt` ตอนจบ) |
+| `mc_steps=28` | Multicycle CPU ใช้เวลาทั้งหมด 28 step (clock) สำหรับโปรแกรมนี้ |
+| `expects=6` | ตรวจสอบค่าที่เขียนคาดการณ์ไว้ในไฟล์ `.s` (`#! expect`) ผ่านครบ 6 ข้อ |
+| `cpusim=ref` | ผลลัพธ์ตรงกับ `cpuSim V7` ของอาจารย์ครบทุก Register |
+| `single=ref` | Single-cycle ให้ผล **ตรงกับเฉลย** ทุก Register, ทุก Word ใน Data Memory และใช้จำนวน Cycle ถูกต้อง |
+| `multi=ref` | Multicycle ให้ผลตรงกับเฉลย และใช้จำนวน Step ตรงตามสเปค FSM |
+| `single!=ref` | **ผลไม่ตรงกับเฉลย** โดยจะมีบรรทัดแจ้งว่า Register หรือ Memory ช่องใดต่างกัน เช่น `ref: r19 00000001  rtl: r19 00000000` (หมายถึง `$19` ควรเป็น `1` แต่ได้ `0`) |
 
-**รันเฉพาะบางโปรแกรม:** `python sim/run_all.py t_slt t_beq`
+**การรันทดสอบเฉพาะบางโปรแกรม:**
+
+```bash
+python sim/run_all.py t_slt t_beq
+```
 
 ---
 
 ## 4. ดูโปรแกรมวิ่งทีละ step (trace)
 
-นี่คือเครื่องมือที่ดีที่สุดสำหรับเรียนรู้และหาบั๊ก
+เครื่องมือ [`sim/trace.py`](../sim/trace.py) ช่วยให้เห็นการทำงานภายใน CPU ทีละจังหวะ เหมาะสำหรับใช้ศึกษาการทำงานและไล่หาบั๊ก:
 
-```
+```bash
 python sim/trace.py programs/examples/ex_lw_add.s --reg t2
 ```
 
-| ตัวเลือก | ทำอะไร |
+| ตัวเลือก (Flag) | หน้าที่การทำงาน |
 |---|---|
-| `--core single` / `--core multi` | ดูเฉพาะตัวเดียว (ค่าเริ่มต้นดูทั้งสอง) |
-| `--reg t2` หรือ `--reg 10` | โชว์ค่า register นี้ทุกบรรทัด (ใน PowerShell อย่าพิมพ์ `$t2` ตรงๆ เพราะ `$` คือตัวแปร) |
-| `--vcd` | เขียน waveform ไว้เปิดด้วย GTKWave |
+| `--core single` / `--core multi` | เลือกดูเฉพาะตัวเดียว (ค่าเริ่มต้นจะแสดงทั้งสองตัวต่อกัน) |
+| `--reg t2` หรือ `--reg 10` | แสดงค่าของ Register ที่ระบุในทุกบรรทัด *(หมายเหตุ: ใน PowerShell อย่าพิมพ์ `$t2` ตรงๆ เพราะ `$` จะถูกตีความเป็นตัวแปรของ Shell)* |
+| `--vcd` | สร้างไฟล์ Waveform (`.vcd`) เก็บไว้ใน `build/trace/` สำหรับเปิดดูด้วย GTKWave |
 
-ตัวอย่างผลของ multicycle (ผลจริงจากเครื่อง):
+ตัวอย่างผลลัพธ์ของ Multicycle:
 
-```
+```text
 cycle    0  S0  FETCH      pc=00000000  instr=00000000  retired=0  active=0180003f  $10=00000000
 cycle    1  S1  DECODE     pc=00000004  instr=8c080400  retired=0  active=030003c8  $10=00000000
 cycle    2  S2  MEM_ADDR   pc=00000004  instr=8c080400  retired=0  active=01001600  $10=00000000
@@ -119,313 +145,257 @@ cycle    4  S4  MEM_WB     pc=00000004  instr=8c080400  retired=0  active=020180
 cycle    5  S0  FETCH      pc=00000004  instr=8c080400  retired=1  ...
 ```
 
-- แต่ละบรรทัดคือสถานะ **ก่อน** เดิน step นั้น
-- `instr` ของ multicycle คือค่าใน IR (กล่องเก็บคำสั่ง) ตอน S0 จึงยังเป็นคำสั่งเก่าอยู่ เพราะ S0 คือจังหวะที่กำลังไปหยิบคำสั่งใหม่
-- `active` คือบิตบอกว่าเส้นไหนในภาพ datapath ติดไฟ (ดู [`wire_map.md`](wire_map.md))
+- แต่ละบรรทัดแสดงสถานะ **ก่อน** เดิน Step นั้นๆ
+- ค่า `instr` ของ Multicycle คือค่าที่อยู่ในกล่อง `IR` (Instruction Register) ดังนั้นในจังหวะ `S0 FETCH` จึงยังแสดงคำสั่งเก่าอยู่ เพราะกำลังจะไปหยิบคำสั่งใหม่จาก Memory
+- ค่า `active` คือบิตมาสก์ที่บอกว่าเส้นไหนในภาพ Datapath กำลังติดสี (ดูตารางความหมายได้ที่ [`wire_map.md`](wire_map.md))
 
-### เปิด waveform ด้วย GTKWave
+### 📈 วิธีเปิดดู Waveform ด้วย GTKWave
 
-1. `python sim/trace.py programs/examples/ex_lw_add.s --core multi --vcd`
-2. `C:\iverilog\gtkwave\bin\gtkwave.exe build\trace\ex_lw_add.multi.vcd`
-3. ด้านซ้ายกดขยาย `tb_cpu` → `dut` แล้วลากสัญญาณเหล่านี้มาที่หน้าต่าง Signals:
-   - ทั้งสองแบบ: `clk`, `en`, `pc_r`, `retired_r`, `done`
-   - multicycle: `state`, `ir`, `a_r`, `b_r`, `alu_out`, `mdr`, `mem_addr`
-   - single-cycle: `instr`, `alu_y`, `wb_data`, `pc_next`
-4. คลิกขวาที่สัญญาณ → Data Format → Hex ให้อ่านง่าย
+1. รันสร้างไฟล์ `.vcd`:
+   ```bash
+   python sim/trace.py programs/examples/ex_lw_add.s --core multi --vcd
+   ```
+2. เปิดโปรแกรม GTKWave:
+   ```bat
+   C:\iverilog\gtkwave\bin\gtkwave.exe build\trace\ex_lw_add.multi.vcd
+   ```
+3. ในช่องซ้ายมือ กดขยาย `tb_cpu` → `dut` แล้วลากสัญญาณที่สนใจมาวางในหน้าต่าง **Signals**:
+   - **สัญญาณพื้นฐานทั้งสองตัว:** `clk`, `en`, `pc_r`, `retired_r`, `done`
+   - **เฉพาะ Multicycle:** `state`, `ir`, `a_r`, `b_r`, `alu_out`, `mdr`, `mem_addr`
+   - **เฉพาะ Single-cycle:** `instr`, `alu_y`, `wb_data`, `pc_next`
+4. คลิกขวาที่ชื่อสัญญาณ → **Data Format** → **Hex** เพื่อให้อ่านค่าตัวเลขได้ง่าย
 
 ---
 
 ## 5. เขียนโปรแกรม assembly เอง
 
-### 5.1 ไฟล์ตัวอย่าง
+### 5.1 ตัวอย่างไฟล์เริ่มต้น
 
 สร้างไฟล์ `programs/examples/my_first.s`:
 
 ```asm
-# บวก 5 + 7 แล้วเก็บลง memory
+# บวก 5 + 7 แล้วเก็บผลลัพธ์ลงใน Memory
         .data
-answer: .word 0                 # จองที่ไว้ 1 word ที่ 0x400
+answer: .word 0                 # จองพื้นที่ 1 word ที่ address 0x400
 
         .text
         addi $t0, $zero, 5      # $t0 = 5
         addi $t1, $zero, 7      # $t1 = 7
         add  $t2, $t0, $t1      # $t2 = 12
-        sw   $t2, answer($zero) # เก็บ 12 ลงที่ answer
-        halt                    # จบโปรแกรม
+        sw   $t2, answer($zero) # เก็บค่า 12 ลงที่ตำแหน่ง answer (0x400)
+        halt                    # จบโปรแกรม (j กระโดดหาตัวเอง)
 
 #! expect $t2 = 12
 #! expect mem[answer] = 12
 ```
 
-แล้วรัน:
+จากนั้นสั่งรันจำลองและตรวจคำตอบ:
 
-```
+```bash
 python sim/trace.py programs/examples/my_first.s --reg t2
 python sim/run_all.py my_first
 ```
 
-### 5.2 กฎการเขียน
+### 5.2 กฎการเขียนโปรแกรม Assembly
 
-| เรื่อง | กฎ |
+| หัวข้อ | กฎและรูปแบบที่รองรับ |
 |---|---|
-| คำสั่งที่ใช้ได้ | `add sub and or slt` (R-type), `addi lw sw beq` (I-type), `j` (J-type) |
-| คำสั่งช่วย (pseudo) | `nop` = ไม่ทำอะไร, `halt` = จบโปรแกรม (จริงๆ คือ `j` ที่กระโดดหาตัวเอง) |
-| register | ใช้ชื่อ (`$t0`, `$s1`, `$zero`) หรือเลข (`$8`) ก็ได้ |
-| ลูกน้ำ | ใส่หรือไม่ใส่ก็ได้: `add $t0, $t1, $t2` = `add $t0 $t1 $t2` |
-| comment | ขึ้นต้นด้วย `#` หรือ `;` |
-| label | `ชื่อ:` ใช้เป็นเป้าหมายของ `beq`/`j` หรือเป็น address ของข้อมูล |
-| ตัวเลข | ฐานสิบ `42`, ฐานสิบหก `0x2a`, ฐานสอง `0b101010`, ติดลบ `-5` |
-| immediate ของ `addi` | 16 bit: -32768 ถึง 32767 (ใส่ 0x8000–0xFFFF ได้ แต่จะกลายเป็นเลขลบ) |
-| `.text` | ส่วนโปรแกรม เริ่มที่ address 0x000 (สูงสุด 256 คำสั่ง) |
-| `.data` | ส่วนข้อมูล เริ่มที่ address 0x400 (สูงสุด 256 word) |
-| `.word 1, 2, 3` | ใส่ข้อมูลทีละ word |
-| `.space 16` | จองที่ 16 byte (= 4 word) ค่าเป็น 0 |
-| **lw/sw** | **ต้องอ้าง address ในช่วง 0x400–0x7FF และหาร 4 ลงตัว** ไม่อย่างนั้น ref_model จะฟ้อง error |
-| จบโปรแกรม | ต้องจบด้วย `halt` ไม่อย่างนั้น CPU จะวิ่งต่อไปเรื่อยๆ |
+| **คำสั่งมาตรฐาน (10 ตัว)** | **R-type:** `add`, `sub`, `and`, `or`, `slt`<br/>**I-type:** `addi`, `lw`, `sw`, `beq`<br/>**J-type:** `j` |
+| **คำสั่งช่วย (Pseudo)** | `nop` = ไม่ทำอะไร (`sll $0, $0, 0`), `halt` = จบโปรแกรม (`j` กระโดดหาตัวเอง) |
+| **การอ้างอิง Register** | ใช้ชื่อมาตรฐาน (`$t0`, `$s1`, `$zero`) หรือใช้หมายเลข (`$8`, `$17`, `$0`) ก็ได้ |
+| **เครื่องหมายลูกน้ำ (`,`)** | ใส่หรือไม่ใส่ก็ได้ เช่น `add $t0, $t1, $t2` มีค่าเท่ากับ `add $t0 $t1 $t2` |
+| **Comment** | ขึ้นต้นด้วย `#` หรือ `;` |
+| **Label** | ตั้งชื่อตามด้วย `:` เช่น `loop:` ใช้เป็นเป้าหมายของ `beq`/`j` หรือชื่อตัวแปรใน `.data` |
+| **รูปแบบตัวเลข** | ฐานสิบ `42`, ฐานสิบหก `0x2a`, ฐานสอง `0b101010`, เลขติดลบ `-5` |
+| **Immediate ของ `addi`** | ขนาด 16-bit มีค่าระหว่าง `-32768` ถึง `32767` (หากใส่ `0x8000–0xFFFF` จะถูกขยายเครื่องหมายเป็นเลขลบ) |
+| **`.text` / `.data`** | `.text` เริ่มที่ `0x000` (สูงสุด 256 คำสั่ง) · `.data` เริ่มที่ `0x400` (สูงสุด 256 words) |
+| **การจองข้อมูล** | `.word 1, 2, 3` (ใส่ข้อมูลทีละ word) · `.space 16` (จองพื้นที่ 16 bytes = 4 words ค่าเริ่มต้นเป็น 0) |
+| **ข้อกำหนดของ `lw` / `sw`** | **ต้องอ้างถึง Address ในช่วง `0x400–0x7FF` และหารด้วย 4 ลงตัวเท่านั้น** มิฉะนั้น `ref_model.py` จะแจ้ง Error ทันที |
+| **การจบโปรแกรม** | ต้องลงท้ายด้วย `halt` เสมอ มิฉะนั้น CPU จะวิ่งต่อไปในหน่วยความจำว่างเรื่อยๆ |
 
-**ชื่อ register:**
+#### ตารางชื่อ Register มาตรฐาน MIPS
 
-| ชื่อ | เลข | ใช้ทำอะไร (ตามธรรมเนียม MIPS) |
-|---|---|---|
-| `$zero` | 0 | ค่า 0 เสมอ เขียนไม่ติด |
-| `$at` | 1 | สำรองให้ assembler |
-| `$v0–$v1` | 2–3 | ค่าที่ฟังก์ชันส่งกลับ |
-| `$a0–$a3` | 4–7 | argument ของฟังก์ชัน |
-| `$t0–$t7` | 8–15 | ตัวแปรชั่วคราว ← **ใช้ตัวนี้บ่อยสุด** |
-| `$s0–$s7` | 16–23 | ตัวแปรที่ต้องเก็บไว้นาน |
-| `$t8–$t9` | 24–25 | ชั่วคราวเพิ่ม |
-| `$k0–$k1` | 26–27 | สำรองให้ OS |
-| `$gp $sp $fp $ra` | 28–31 | pointer ต่างๆ และ return address |
+| ชื่อ Register | หมายเลข | หน้าที่ตามธรรมเนียม MIPS |
+|---|:---:|---|
+| `$zero` | `0` | มีค่าเป็น `0` เสมอ (เขียนทับไม่ได้) |
+| `$at` | `1` | สำรองไว้สำหรับ Assembler |
+| `$v0 – $v1` | `2 – 3` | เก็บค่าที่ส่งกลับจากฟังก์ชัน (Return Value) |
+| `$a0 – $a3` | `4 – 7` | เก็บพารามิเตอร์ที่ส่งเข้าฟังก์ชัน (Arguments) |
+| **`$t0 – $t7`** | **`8 – 15`** | **ตัวแปรชั่วคราว (นิยมใช้บ่อยที่สุด และแสดงผลบนจอ VGA)** |
+| `$s0 – $s7` | `16 – 23` | ตัวแปรที่ต้องการเก็บรักษาค่าข้ามฟังก์ชัน (Saved Registers) |
+| `$t8 – $t9` | `24 – 25` | ตัวแปรชั่วคราวเพิ่มเติม |
+| `$k0 – $k1` | `26 – 27` | สำรองไว้สำหรับระบบปฏิบัติการ (OS Kernel) |
+| `$gp, $sp, $fp, $ra` | `28 – 31` | พอยน์เตอร์ต่างๆ และ Return Address |
 
-> ในโปรเจคนี้ทุก register ใช้ได้เหมือนกันหมด (ยกเว้น `$zero`) ชื่อเป็นแค่ธรรมเนียมให้อ่านง่าย
+### 5.3 การใส่บรรทัดตรวจคำตอบอัตโนมัติ (`#! expect`)
 
-### 5.3 ใส่ "ค่าที่คาดไว้" ให้เช็กอัตโนมัติ
+สามารถใส่คอมเมนต์พิเศษ `#! expect` ไว้ที่ท้ายไฟล์ `.s` เพื่อให้ `run_all.py` ตรวจคำตอบให้อัตโนมัติ:
 
-เขียนบรรทัดพวกนี้ที่ไหนก็ได้ในไฟล์ `.s` (assembler จะข้ามเพราะขึ้นต้นด้วย `#`)
-
-| รูปแบบ | ตัวอย่าง |
+| สิ่งที่ต้องการตรวจ | ตัวอย่างรูปแบบการเขียน |
 |---|---|
-| ค่า register | `#! expect $t2 = 12` หรือ `#! expect $10 = 0xc` |
-| ค่าใน memory | `#! expect mem[0x400] = 12` หรือ `#! expect mem[answer] = 12` |
-| จำนวนคำสั่งที่รัน | `#! expect retired = 5` |
-| จำนวน step ของ multicycle | `#! expect steps = 16` |
+| ค่าใน Register | `#! expect $t2 = 12` หรือ `#! expect $10 = 0xc` |
+| ค่าใน Data Memory | `#! expect mem[0x400] = 12` หรือ `#! expect mem[answer] = 12` |
+| จำนวนคำสั่งที่รันเสร็จ | `#! expect retired = 5` |
+| จำนวน Step ของ Multicycle | `#! expect steps = 16` |
 | จำนวนคำสั่งที่ไม่รู้จัก | `#! expect illegal = 0` |
 
-> 💡 **ทำไมต้องเขียน expect เอง?** ref_model กับ CPU เขียนโดยคนกลุ่มเดียวกัน ถ้าเข้าใจผิดเหมือนกันทั้งคู่ ผลจะ "ตรงกัน" แต่ผิดทั้งคู่ ค่าที่คิดด้วยมือเป็นตัวตรวจทางที่สามที่ไม่ขึ้นกับโค้ด
+> [!IMPORTANT]
+> **ทำไมควรเขียน `#! expect` กำกับไว้เสมอ?** เพราะทั้ง `ref_model.py` และวงจร Verilog เขียนโดยทีมเดียวกัน หากตีความโจทย์ผิดเหมือนกันผลก็จะ "ตรงกันแต่ผิดทั้งคู่" การใส่ค่าที่คำนวณด้วยมือลงใน `#! expect` จึงช่วยเป็นจุดตรวจสอบอิสระอีกชั้นหนึ่ง
 
-### 5.4 ใช้เครื่องมือทีละตัว (ถ้าอยากรู้ว่าข้างในทำอะไร)
+### 5.4 การรัน Assembler และ Reference Model แยกทีละตัว
 
-```
+```bash
+# แปลงไฟล์ .s เป็น .mem พร้อมแสดงตาราง Address และ Machine Code (--listing)
 python tools/asm.py programs/examples/my_first.s -o build/my_first.mem --listing
+
+# รันจำลองด้วย Reference Model พร้อมพิมพ์ทุกคำสั่งที่ทำงาน (--trace)
 python tools/ref_model.py build/my_first.mem --trace
 ```
 
-- `asm.py --listing` โชว์ address, machine code (hex) และบรรทัดต้นฉบับ
-- `ref_model.py --trace` โชว์ทุกคำสั่งที่รัน และค่า register ทั้ง 32 ตัวตอนจบ
+### 5.5 รูปแบบการเขียนลูปและเงื่อนไขที่ใช้บ่อย
 
-### 5.5 รูปแบบลูปที่ใช้บ่อย
-
-ISA ของเราไม่มี `bne`, `blt`, `mul` ต้องประกอบเอง:
+เนื่องจากชุดคำสั่งของเรามี 10 คำสั่งพื้นฐาน (ไม่มี `bne`, `blt`, `mul`) เราสามารถประกอบสร้างคำสั่งเหล่านั้นได้ดังนี้:
 
 ```asm
-# for (i = 0; i < 10; i++) { ... }
+# 1. ลูป for (i = 0; i < 10; i++) { ... }
         addi $t0, $zero, 0          # i = 0
-        addi $t1, $zero, 10         # limit
-loop:   slt  $t2, $t0, $t1          # t2 = (i < 10)
-        beq  $t2, $zero, done       # ถ้าไม่จริง ออกจากลูป
-        # ... งานในลูป ...
+        addi $t1, $zero, 10         # limit = 10
+loop:   slt  $t2, $t0, $t1          # $t2 = 1 ถ้า i < 10, มิฉะนั้น $t2 = 0
+        beq  $t2, $zero, done       # ถ้า i >= 10 ($t2 == 0) ให้ออกจากลูป
+        # ... โค้ดงานภายในลูป ...
         addi $t0, $t0, 1            # i++
         j    loop
 done:
 
-# if (a != b) goto L   (ไม่มี bne)
-        beq  $a0, $a1, skip
-        j    L
+# 2. เงื่อนไข if (a != b) goto L (จำลองคำสั่ง bne)
+        beq  $a0, $a1, skip         # ถ้าเท่ากันให้ข้ามไป
+        j    L                      # ถ้าไม่เท่ากันให้กระโดดไป L
 skip:
 
-# a = b * c (ไม่มีคูณ: บวกซ้ำ c ครั้ง)  ดู programs/tests/t_factorial.s
+# 3. การคูณเลข a = b * c (ใช้วิธีบวกซ้ำ c รอบ — ดูตัวอย่างใน programs/tests/t_factorial.s)
 ```
 
 ---
 
-## 6. ลงบอร์ด (ทำที่เครื่องเพื่อนที่มี Vivado)
+## 6. ลงบอร์ดและใช้งานเว็บ
 
-### 6.1 ส่งไฟล์ให้เพื่อน
+### 6.1 คำสั่งสังเคราะห์วงจรและโหลดลงบอร์ดด้วย Vivado 2025.2
 
-zip โฟลเดอร์ `rtl` `constr` `mem` `fpga` (และ `README.md`) ตั้งชื่อมีวันที่ เช่น `cpu-race_2026-11-05.zip`
+```bat
+:: ทดสอบบอร์ดเบื้องต้น (Smoke Test)
+fpga\run.bat smoke            :: สังเคราะห์วงจรอย่างเดียว
+fpga\run.bat smoke program    :: สังเคราะห์แล้วโหลดลงบอร์ดทันที
 
-### 6.2 สิ่งที่เพื่อนทำ
-
-```
-fpga\run.bat smoke            ← build อย่างเดียว
-fpga\run.bat smoke program    ← build แล้วโหลดลงบอร์ด
-```
-
-ถ้าขึ้นว่าหา `vivado` ไม่เจอ ให้รัน `settings64.bat` ของ Vivado ก่อน (อยู่ในโฟลเดอร์ที่ติดตั้ง Vivado)
-
-### 6.3 ผลที่ควรเห็นบนบอร์ด (smoke test)
-
-| ทำอะไร | ควรเห็น |
-|---|---|
-| โยกสวิตช์ | LED ดวงเดียวกันติด/ดับตาม |
-| กด BTNC (ปุ่มกลาง) ค้าง | LED ติดหมด 16 ดวง |
-| รอเฉยๆ | 7-seg หลักขวาสุดนับ 0, 1, ..., F ทีละวินาที |
-| โยก SW0–SW3 | 7-seg หลักซ้ายสุดแสดงเลขฐานสิบหกของสวิตช์ 4 ตัวนั้น |
-| กด CPU_RESETN (ปุ่มแดง) | ตัวนับกลับเป็น 0 |
-
-### 6.4 ตัวเต็ม (CPU Race)
-
-```
+:: วงจร CPU Race ตัวเต็ม (ใช้เวลาสังเคราะห์ประมาณ 5–10 นาที)
 fpga\run.bat top program
 ```
 
-ใช้เวลานานกว่า smoke (ประมาณ 5–15 นาที เพราะมีภาพพื้นหลังใน BRAM) ผลอยู่ใน `build\top\`
+> [!TIP]
+> หาก Terminal แจ้งว่าไม่พบคำสั่ง `vivado` ให้รัน `call <โฟลเดอร์ที่ติดตั้ง Vivado>\2025.2\Vivado\settings64.bat` ก่อน
 
-**ผลที่ควรเห็นบนบอร์ด:**
+### 6.2 ผลที่ควรเห็นบนบอร์ด (Smoke Test vs ตัวเต็ม)
 
-| ทำอะไร | ควรเห็น |
+| โหมดการรัน | การกระทำบนบอร์ด | ผลลัพธ์ที่ต้องเห็น |
+|---|---|---|
+| **Smoke Test (`smoke`)** | โยกสวิตช์ `SW15–0` | ไฟ LED ดวงที่ตรงกันติด/ดับตามสวิตช์ |
+| | กดปุ่มกลาง `BTNC` ค้าง | ไฟ LED ติดครบทั้ง 16 ดวง |
+| | ปล่อยไว้ตามปกติ | 7-Segment หลักขวาสุดนับ `0, 1, ..., F` ทีละวินาที, หลักซ้ายสุดแสดงค่า Hex ของ `SW3–0` |
+| **ตัวเต็ม (`top`)** | หลังโหลด Bitstream เสร็จ | จอ VGA ขึ้นภาพ Datapath สองฝั่ง + แถวบนขึ้น `PROG A  OV 0  TIME 00000000` และ `LED0` (สถานะ `S0`) ติด |
+| | ตั้ง `SW15 = 0` แล้วกด `BTNC` | เวลา `TIME` เพิ่มทีละเหตุการณ์ (`0A`, `14`, `1E`, ...) เส้นสีส้ม/ฟ้าบนจอเปลี่ยน และไฟ `LED[11:0]` เลื่อนตาม State ของ Multicycle |
+| | ตั้ง `SW15 = 1`, `SW14–12 = 011` แล้วกด `BTNR` | วิ่งแข่งอัตโนมัติประมาณ 15 วินาที เมื่อจบจะขึ้นคำว่า **`WINNER`** บนจอ และไฟ `LED15`/`LED14` ติด |
+| | เปลี่ยน `SW3–0` (`ov`) หรือ `SW4` (`Prog`) แล้วกด `BTNL` | โหลดโปรแกรมใหม่และรีเซ็ตเวลากลับเป็น `0` พร้อมเริ่มแข่งรอบใหม่ |
+| | กดปุ่มบน `BTNU` | สลับการแสดงผลบน 7-Segment ระหว่าง *จำนวนคำสั่งที่ทำเสร็จ* กับ *เวลา* (4 หลักซ้าย = Single, 4 หลักขวา = Multi) |
+
+### 6.3 ไฟล์รายงานผลลัพธ์ใน `build/<target>/`
+
+| ไฟล์รายงาน | ข้อมูลสำคัญที่ต้องตรวจเช็ก |
 |---|---|
-| หลังโหลด bitstream | จอ VGA ขึ้นภาพ datapath สองฝั่ง + `PROG A  OV 0  TIME 00000000`, LED[14:0] มีดวงเดียวติดที่ตำแหน่ง S0 (LED0) |
-| SW15 = 0 แล้วกด BTNC | TIME เพิ่มทีละเหตุการณ์ (0A, 14, 1E, ...) เส้นบนจอเปลี่ยน, LED state ของ multi เลื่อน |
-| SW15 = 1, SW14–12 = 011 แล้วกด BTNR | วิ่งเองประมาณ 15 วินาที จบแล้วขึ้น WINNER, LED15 / LED14 ติด |
-| โยก SW3–0, SW4 แล้วกด BTNL | เริ่มใหม่ด้วย ov / โปรแกรมใหม่ |
-| กด BTNU | 7-seg สลับระหว่างจำนวนคำสั่ง กับเวลา (ซ้าย 4 หลัก = single, ขวา 4 หลัก = multi) |
+| `messages_summary.txt` | สรุปจำนวน `ERROR` / `CRITICAL WARNING` / `WARNING` และค่า `WNS` |
+| `timing_summary.rpt` | รายงาน Timing ละเอียด (`WNS` ต้อง $\ge 0$ ซึ่งของเรามีค่า `+19.195 ns`) |
+| `utilization.rpt` | รายงานการใช้ทรัพยากรชิป (`LUT`, `FF`, `LUTRAM`, `BRAM`) |
+| `vivado.log` | บันทึกการทำงานฉบับเต็มของ Vivado สำหรับไล่หาสาเหตุกรณีเกิดปัญหา |
 
-ตัวเลขที่ควรได้ของแต่ละกรณีอยู่ใน [`demo_script.md`](demo_script.md)
+### 6.4 การจัดการไฟล์ขาพอร์ต (`.xdc`)
 
-### 6.5 สิ่งที่ต้องส่งกลับมา
+> [!WARNING]
+> **ห้ามแก้ไขไฟล์ `constr/smoke.xdc` หรือ `constr/nexys_a7_100t.xdc` ด้วยมือโดยตรง**
+> หากต้องการเพิ่มหรือลดขาพอร์ต ให้แก้ไขรายการในสคริปต์ [`tools/make_xdc.py`](../tools/make_xdc.py) แล้วสั่งรัน:
+> ```bash
+> python tools/make_xdc.py smoke    # หรือ full
+> ```
+> สคริปต์จะดึงบรรทัดที่ถูกต้องจากไฟล์ต้นฉบับ `Nexys-A7-100T-Master.xdc` ของ Digilent มาเปิดใช้งานให้โดยอัตโนมัติ เพื่อป้องกันการกำหนดระดับแรงดันไฟผิด (เช่น `SW8` และ `SW9` บนบอร์ดนี้ใช้ไฟ `LVCMOS18` ต่างจากขาอื่นที่ใช้ `LVCMOS33`)
 
-โฟลเดอร์ `build\smoke\` หรือ `build\top\` ทั้งหมด **ยกเว้น** `.bit`:
+### 6.5 เมื่อแก้ไขโปรแกรม Demo หรือแก้ภาพหน้าจอ
 
-| ไฟล์ | ดูอะไร |
-|---|---|
-| `messages_summary.txt` | จำนวน ERROR / CRITICAL WARNING / WARNING และ WNS |
-| `timing_summary.rpt` | timing ผ่านไหม (WNS ต้อง ≥ 0) |
-| `utilization.rpt` | ใช้ LUT, FF, BRAM ไปเท่าไร |
-| `vivado.log` | log เต็ม ไว้หาสาเหตุเวลามีปัญหา |
+เนื่องจากไฟล์ใน `mem/` จะถูกฝังเข้าไปใน Bitstream ตอนสั่ง Build หากมีการแก้ไขไฟล์ `programs/demo*.s` หรือ `tools/gen_screen.py` ต้องรันคำสั่งอัปเดตไฟล์ `.mem` ก่อนเสมอ:
 
-### 6.6 ไฟล์ขา (.xdc)
-
-**ห้ามแก้ `constr/*.xdc` ด้วยมือ** ถ้าต้องเพิ่มขา ให้แก้รายชื่อ port ใน `tools/make_xdc.py` แล้วรัน
-
-```
-python tools/make_xdc.py smoke    # หรือ full
-```
-
-สคริปต์จะ uncomment บรรทัดจากไฟล์ต้นฉบับของ Digilent ให้ ซึ่งกันพิมพ์ขาผิด (เช่น SW8, SW9 ใช้ไฟ 1.8 V ต่างจากขาอื่นที่เป็น 3.3 V)
-
----
-
-### 6.7 แก้โปรแกรม demo หรือหน้าจอ
-
-ไฟล์ใน `mem/` ถูกฝังลง bitstream ตอน build ถ้าแก้ `programs/demo*.s` หรือ `tools/gen_screen.py` ต้องสร้างใหม่ก่อนส่งให้เพื่อน:
-
-```
-python tools/build_mems.py       # สร้าง mem/progA.mem, progB.mem, font.mem, bg.mem, text.mem
-python tools/race_calc.py programs/demoA_alu_heavy.s   # ดูว่าผลพลิกที่ ov เท่าไร
-python sim/run_all.py            # ต้อง ALL PASS ก่อนส่ง
-python sim/vga_frame.py --prog A --ov 0                # ดูภาพจอจริงจาก simulation
+```bash
+python tools/build_mems.py                             # สร้าง mem/progA.mem, progB.mem, font.mem, bg.mem, text.mem ใหม่
+python tools/race_calc.py programs/demoA_alu_heavy.s   # ตรวจสอบจุดพลิกผลที่ค่า ov ต่างๆ
+python sim/run_all.py                                  # รันเทสต์ยืนยันว่าได้ ALL PASS
+python sim/vga_frame.py --prog A --ov 0                # สร้างภาพหน้าจอ VGA จาก Simulation มาตรวจดูความเรียบร้อย
 ```
 
-### 6.8 เครื่องมือจำลองทั้งบอร์ด (ไม่ต้องมีบอร์ด)
+### 6.6 คำสั่งจำลองทั้งบอร์ดและจับภาพจอ (`vga_frame.py`)
 
-| คำสั่ง | ทำอะไร |
+| คำสั่ง | ผลลัพธ์ที่ได้ |
 |---|---|
-| `python sim/vga_frame.py` | จำลองทั้งบอร์ด (`rtl/top.v`) แข่งโปรแกรม A ที่ ov=0 จนจบ แล้วถ่ายภาพจอเป็น PNG ใน `build/frames/` |
-| `python sim/vga_frame.py --prog B --ov 4` | เปลี่ยนโปรแกรม / ov |
-| `python sim/vga_frame.py --units 900` | หยุดกลางทางที่เวลา 900 แล้วถ่าย |
-| `python sim/vga_frame.py --steps 5` | ใช้ step mode กด BTNC 5 ครั้งแล้วถ่าย |
-| `python tools/race_calc.py <ไฟล์.s>` | ตารางเวลา single / multi ทุกค่า ov และจุดพลิก |
-| `python tools/cpusim_adapter.py <ไฟล์.s>` | รันบน cpuSim ของอาจารย์ (โชว์บรรทัดที่ส่งให้ cpuSim และค่า register) |
+| `python sim/vga_frame.py` | จำลองทั้งบอร์ด (`rtl/top.v`) แข่งโปรแกรม A ที่ `ov = 0` จนจบ แล้วบันทึกภาพหน้าจอเป็น PNG ใน `build/frames/` |
+| `python sim/vga_frame.py --prog B --ov 4` | จำลองโปรแกรม B ที่ค่า `ov = 4` จนจบแล้วจับภาพหน้าจอ |
+| `python sim/vga_frame.py --units 900` | หยุดจำลองระหว่างทางที่เวลา `900` หน่วยเวลา แล้วจับภาพขณะกำลังวิ่งแข่ง |
+| `python sim/vga_frame.py --steps 5` | จำลองโหมด Step โดยกดปุ่ม `BTNC` จำนวน 5 ครั้งแล้วจับภาพ |
+| `python tools/race_calc.py <ไฟล์.s>` | แสดงตารางเวลาจบของ Single-cycle และ Multicycle ทุกค่า `ov` (`0–15`) พร้อมจุดพลิกผล |
+| `python tools/cpusim_adapter.py <ไฟล์.s>` | รันโปรแกรมบน `cpuSim V7` ของอาจารย์และแสดงค่า Register ทั้งหมดเมื่อจบการทำงาน |
 
----
+### 6.7 การใช้งานเว็บ CPU Race Lab (`web/`)
 
-## 6.9 เว็บ CPU Race Lab (`web/`)
+เปิดใช้งานได้ทันทีโดยดับเบิลคลิกไฟล์ [`web/index.html`](../web/index.html) บน Chrome หรือ Edge (ทำงานแบบ Offline ได้ 100%):
 
-**เปิดใช้:** ดับเบิลคลิก `web/index.html` (เปิดด้วย Chrome หรือ Edge) ใช้ได้โดยไม่ต้องต่อเน็ต ถ้ามีเน็ตจะได้ฟอนต์สวยกว่า
-
-| แท็บ | ทำอะไรได้ |
+| แท็บเมนู | ฟีเจอร์และการใช้งาน |
 |---|---|
-| แข่ง | เลือกโปรแกรม + ov แล้วดู single กับ multi แข่งกัน ภาพ datapath เดียวกับจอ VGA เส้นที่ติดสีคือเส้นที่จะใช้ในจังหวะถัดไป (มีจุดวิ่งบอกทิศข้อมูล) ชี้เมาส์ที่เส้นเพื่อดูชื่อและค่า · กด Space / → ทีละจังหวะ, R วิ่ง/หยุด · ทายผลก่อนเริ่มได้ · กราฟเวลาจบทุกค่า ov + สมการ IC × CPI × T |
-| บทเรียน | 8 บทจากบทเรียนในโปรเจค แต่ละบทมีปุ่ม "ลอง" พาไปหน้าแข่ง |
-| เขียนโปรแกรม | พิมพ์ assembly แล้วดู machine code แยกช่องเป็นสี, ผลเมื่อรันจบ, เช็ก `#! expect`, ส่งไปแข่ง (โค้ดที่พิมพ์ถูกจำไว้ในเบราว์เซอร์) |
-| เลขฐาน & ถอดรหัส | แปลง hex / unsigned / signed / binary คลิกสลับทีละ bit, ถอดรหัส machine code, sign-extend 16 → 32 |
-| แบบฝึก | สุ่มโจทย์ไม่จำกัด 5 แบบ พร้อมเฉลยและคำอธิบาย |
-| บนบอร์ด | เลือกโปรแกรม/ov แล้วเว็บบอกว่าต้องโยกสวิตช์ตัวไหน กดปุ่มอะไร และจอบอร์ดต้องขึ้นเลขอะไร |
+| **แข่ง** | เลือกโปรแกรมและปรับสไลเดอร์ `ov` เพื่อดู Single-cycle กับ Multicycle แข่งกันด้วยภาพ Datapath เดียวกับจอ VGA (ชี้เมาส์ที่เส้นเพื่อดูชื่อและค่าข้อมูลได้, กด `Space` / `→` เพื่อเดินทีละจังหวะ, กด `R` เพื่อวิ่ง/หยุด) พร้อมกราฟเวลาจบทุกค่า `ov` |
+| **บทเรียน** | เนื้อหาบทเรียน 8 บท พร้อมปุ่ม **"ลอง"** ที่กดแล้วพาไปดูตัวอย่างจริงในหน้าแข่งทันที |
+| **เขียนโปรแกรม** | พิมพ์โค้ด MIPS Assembly ดูการถอดรหัสเป็น Machine Code แยกสีตามฟิลด์ ตรวจผล `#! expect` และส่งโค้ดไปวิ่งแข่งได้ทันที |
+| **เลขฐาน & ถอดรหัส** | เครื่องมือแปลงเลขฐาน (`HEX` / `DEC` / `±DEC` / `BIN`) คลิกสลับทีละบิต, ถอดรหัส Machine Code และดูการทำงานของ Sign-Extend 16 → 32 บิต |
+| **แบบฝึก** | ระบบสุ่มโจทย์แบบฝึกหัด 5 รูปแบบไม่จำกัดจำนวนครั้ง พร้อมเฉลยและคำอธิบายละเอียด |
+| **บนบอร์ด** | เลือกโปรแกรมและค่า `ov` ที่ต้องการ แล้วเว็บจะจำลองภาพสวิตช์บนบอร์ดว่าต้องโยกตัวไหนขึ้น/ลง กดปุ่มอะไร และหน้าจอควรแสดงค่าเท่าไร |
 
-ปุ่มด้านบน: **เลขฐาน** (HEX / DEC / ±DEC / BIN) เปลี่ยนทุกตัวเลขในเว็บ, **คำอธิบาย** (ง่าย / ห้องเรียน / ลงลึก) เปลี่ยนระดับภาษาของคำอธิบายทุกจุด
+> [!NOTE]
+> หากแก้ไขไฟล์ `web/page.html`, `web/app.js`, `web/engine.js` หรือโปรแกรมใน `programs/` ให้รัน `python tools/build_web.py` เพื่อสร้างไฟล์ `web/index.html` ใหม่ (ห้ามแก้ `web/index.html` โดยตรง)
 
-**ไฟล์:** `page.html` (เนื้อหา), `app.js` (หน้าเว็บ), `engine.js` (ตัวจำลอง), `programs.js` + `geometry.js` + `index.html` (สร้างด้วย `python tools/build_web.py` ห้ามแก้มือ)
+### 6.8 การใช้งานเว็บ CPU Race Live (`web-live/`) เชื่อมต่อบอร์ดจริงผ่าน USB
 
-**ความถูกต้อง:** `engine.js` ถูกเทียบกับ asm.py, ref_model.py และ trace ของ RTL ทุกโปรแกรม (`node sim/test_web.js` ซึ่ง `run_all.py` เรียกให้อัตโนมัติ) · เปิด `web/index.html#selftest` จะเดินทุกโปรแกรม ทุกเลขฐาน ทุกระดับ และสุ่มแบบฝึก 200 ข้อ แล้วขึ้นแถบเขียว SELFTEST PASS ถ้าไม่มี error
-
-### 6.10 เว็บ CPU Race Live (`web-live/`) คุยกับบอร์ดผ่าน USB
-
-เว็บแยกจาก CPU Race Lab ใช้ภาพ datapath ตัวถอดคำสั่ง และตัวจำลองชุดเดียวกัน แต่ข้อมูลมาจากบอร์ดจริง
-
-**ต้องมี:** บอร์ดที่โหลด bitstream รุ่นที่มี UART (build ตั้งแต่ 2 พ.ย. 2569 หลังเพิ่ม `rtl/io/uart_*.v`) · สาย micro-USB เส้นเดิม · Chrome หรือ Edge บนคอม
-
-**เปิดใช้:**
-1. ต่อสาย USB เปิดสวิตช์บอร์ด (โหลด `top.bit` แล้ว)
-2. ดับเบิลคลิก `web-live/index.html` ถ้าเบราว์เซอร์บอกว่าใช้ Web Serial ไม่ได้ ให้ดับเบิลคลิก `live.bat` ในโฟลเดอร์โปรเจคแทน (เปิดผ่าน `http://localhost:8765`)
-3. กด **เชื่อมต่อบอร์ด** แล้วเลือกพอร์ต USB Serial / FTDI ถ้ามีสองพอร์ตให้เลือกตัวที่เลขมากกว่า
-4. สถานะมุมขวาบนเปลี่ยนจาก **DISCONNECTED** (แดง) เป็น **CONNECTED** (เขียว)
-
-**สถานะการเชื่อมต่อ:**
-
-| ป้าย | ความหมาย |
-|---|---|
-| DISCONNECTED | ยังไม่ได้เลือกพอร์ต, ถอดสาย, ปิดบอร์ด หรือเปิดพอร์ตได้แต่บอร์ดไม่ตอบ (เหตุผลขึ้นในกรอบแดง) แผงทั้งหมดเป็นสีเทาและกดไม่ได้ |
-| CONNECTING | กำลังเปิดพอร์ตและถามบอร์ด |
-| CONNECTED | บอร์ดตอบแล้ว เว็บอ่านสถานะทุก ~0.1 วินาที |
-
-ถ้าบอร์ดหยุดตอบกลางทาง (เช่นกด CPU_RESETN หรือโหลด bitstream ใหม่) เว็บจะขึ้น DISCONNECTED แล้วลองถามใหม่เองทุก 1–2 วินาที
-
-**ทำอะไรได้:** โหลดโปรแกรม A/B · step / วิ่ง / หยุด / เริ่มใหม่ · ตั้ง ov และความเร็วจากเว็บ (หรือติ๊ก "ใช้สวิตช์" ให้สวิตช์บนบอร์ดคุมเหมือนเดิม) · ส่งโปรแกรมที่เขียนเองลงบอร์ด · ดู datapath, register 32 ตัวของทั้งสอง core · **ตรวจผลอัตโนมัติ:** เว็บจำลองโปรแกรมเดียวกันแล้วเทียบกับบอร์ดทุกครั้ง (PC, state, register, เส้นที่ติดไฟ, เวลาจบ, register ตอนจบ)
-
-**ปัญหาที่เจอบ่อย:**
-
-| อาการ | วิธีแก้ |
-|---|---|
-| ไม่มีพอร์ต FTDI ให้เลือก | เช็กสายและสวิตช์เปิดบอร์ด, ลองสายเส้นอื่น (บางเส้นจ่ายไฟอย่างเดียว) |
-| เปิดพอร์ตไม่ได้ | ปิดโปรแกรมอื่นที่ใช้พอร์ต (PuTTY, Tera Term, แท็บอื่นของเว็บนี้, Vivado Hardware Manager ยังโหลดได้ปกติ) |
-| เปิดพอร์ตได้แต่ "บอร์ดไม่ตอบ" | บอร์ดยังใช้ bitstream เก่าที่ไม่มี UART ให้ build และโหลดใหม่ หรือเลือกพอร์ตผิด (กดตัดการเชื่อมต่อแล้วเลือกอีกพอร์ต) |
-| "ไม่ตรงกับตัวจำลอง" | เปลี่ยน ov ด้วยสวิตช์ระหว่างแข่ง หรือกดปุ่มบนบอร์ดระหว่างนั้น ให้กด เริ่มใหม่ |
-
-**ทดสอบโดยไม่มีบอร์ด:** เปิด `web-live/index.html#selftest` ใช้บอร์ดปลอมในเบราว์เซอร์ทดสอบทุกปุ่ม ต้องขึ้นแถบเขียว SELFTEST PASS (การใช้งานปกติไม่ใช้บอร์ดปลอม) · ส่วนวงจรจริงทดสอบด้วย `node sim/test_uart.js` (จำลอง top.v ทั้งตัวแล้วคุยผ่าน UART ด้วย `protocol.js` ตัวเดียวกับเว็บ)
-
-รายละเอียดโปรโตคอล: [`protocol.md`](protocol.md)
+1. ต่อสาย Micro-USB เข้าบอร์ด Nexys A7-100T และเปิดสวิตช์บอร์ด (ต้องโหลด Bitstream รุ่นที่มีโมดูล UART แล้ว)
+2. ดับเบิลคลิกไฟล์ [`live.bat`](../live.bat) ในโฟลเดอร์ `cpu-race/` เพื่อเปิดหน้าเว็บผ่าน `http://localhost:8765` บน Chrome หรือ Edge
+3. กดปุ่ม **"เชื่อมต่อบอร์ด"** แล้วเลือกพอร์ต `USB Serial Port` / `FTDI` (หากมี 2 พอร์ต ให้เลือกพอร์ตที่มีหมายเลข COM สูงกว่า)
+4. เมื่อเชื่อมต่อสำเร็จ ป้ายสถานะมุมขวาบนจะเปลี่ยนจาก `DISCONNECTED` (สีแดง) เป็น `CONNECTED` (สีเขียว) และแสดงสถานะสดจากบอร์ดทุกๆ ~0.1 วินาที พร้อมตรวจสอบเทียบกับตัวจำลองให้อัตโนมัติ
 
 ---
 
 ## 7. แก้ปัญหาที่เจอบ่อย
 
-| อาการ | สาเหตุ / วิธีแก้ |
+| อาการที่พบ | สาเหตุและวิธีแก้ไข |
 |---|---|
-| `[skip] ไม่พบ iverilog/vvp` | ยังไม่ได้ติดตั้ง Icarus หรือติดตั้งไว้ที่อื่น ให้ `winget install Icarus.Verilog` |
-| ภาษาไทยเป็นตัวประหลาด | terminal ไม่ใช่ UTF-8: ใน PowerShell รัน `chcp 65001` ก่อน |
-| `line 7: ไม่รู้จัก register '$t10'` | มีแค่ `$t0–$t9` |
-| `line 5: immediate 40000 เกิน 16 bit` | `addi` ใส่ได้แค่ -32768..32767 ถ้าต้องการเลขใหญ่ให้บวกหลายรอบ |
-| `ref_model: เข้าถึงข้อมูลที่ 0x00000010 นอกช่วง` | lw/sw ไปอ้าง address ของโปรแกรม ต้องใช้ 0x400 ขึ้นไป (ใช้ label ใน `.data` จะไม่พลาด) |
-| `รันเกิน 100000 คำสั่งแล้วยังไม่เจอ halt` | ลืมใส่ `halt` หรือลูปไม่มีทางออก ใช้ `ref_model.py --trace` ดูว่าวนอยู่ตรงไหน |
-| `TIMEOUT after ... cycles` | CPU (Verilog) ไม่ถึง done ทั้งที่ ref_model จบได้ แปลว่ามีบั๊กใน RTL ให้ใช้ `trace.py --vcd` ดู |
-| `single!=ref` หรือ `multi!=ref` | ดูบรรทัดที่ต่าง `r19` = register $19, `m040c` = memory ที่ 0x40C แล้ว trace ดูว่าค่าเพี้ยนตอนคำสั่งไหน |
-| `multi: ใช้ 48 cycle แต่ ref_model คาด 53` | FSM เดินผิดเส้นทาง (ข้ามหรือเกิน state) ให้ trace ดู state ทีละ cycle |
-| `Move-Item ... being used by another process` | มีโปรแกรม (VS Code / terminal) เปิดโฟลเดอร์ค้างอยู่ ปิดแล้วลองใหม่ |
+| `[skip] ไม่พบ iverilog/vvp` | ยังไม่ได้ติดตั้ง Icarus Verilog ให้รันคำสั่ง `winget install Icarus.Verilog` ใน Terminal |
+| ตัวอักษรภาษาไทยใน Terminal อ่านไม่ออก | Terminal ยังไม่ได้ตั้งเป็น UTF-8 ให้รันคำสั่ง `chcp 65001` ใน PowerShell หรือ CMD ก่อน |
+| `line 7: ไม่รู้จัก register '$t10'` | MIPS มีเฉพาะ `$t0–$t7` และ `$t8–$t9` เท่านั้น (ไม่มี `$t10`) |
+| `line 5: immediate 40000 เกิน 16 bit` | คำสั่ง `addi` รับค่าคงที่ได้ในช่วง `-32768` ถึง `32767` เท่านั้น |
+| `ref_model: เข้าถึงข้อมูลที่ 0x00000010 นอกช่วง` | คำสั่ง `lw`/`sw` ไปอ้างถึงพื้นที่ของโปรแกรม (`.text`) ต้องแก้ให้อ้างถึงช่วง `.data` (`0x400–0x7FF`) แทน |
+| `รันเกิน 100000 คำสั่งแล้วยังไม่เจอ halt` | ลืมใส่คำสั่ง `halt` ที่ท้ายโปรแกรม หรือเงื่อนไขออกจากลูปไม่มีวันเป็นจริง (ใช้ `ref_model.py --trace` เพื่อดูว่าติดลูปอยู่บรรทัดใด) |
+| `TIMEOUT after ... cycles` | วงจร Verilog ไม่ยอมจบการทำงานทั้งที่ `ref_model` จบได้ แสดงว่ามีบั๊กใน RTL ให้ใช้ `trace.py --vcd` เพื่อตรวจสอบ |
+| `single!=ref` หรือ `multi!=ref` | ค่า Register หรือ Memory ไม่ตรงกับเฉลย (`r19` = `$19`, `m040c` = Memory ที่ `0x40C`) ให้รัน `trace.py` เพื่อดูว่าค่าเริ่มเพี้ยนที่คำสั่งใด |
 
 ---
 
-## 8. สถานะของแต่ละส่วน (2 พ.ย. 2569)
+## 8. สถานะของแต่ละส่วน
 
-| ส่วน | สถานะ |
+| ส่วนประกอบของระบบ | สถานะปัจจุบัน |
 |---|---|
-| Assembler, reference model, ชุดเทสต์ | ✅ ใช้ได้ |
-| Single-cycle CPU (M1) | ✅ ผ่าน simulation |
-| Multicycle CPU (M4) | ✅ ผ่าน simulation จำนวน step ถูก |
-| cpuSim adapter (ตัวตรวจทางที่ 4) | ✅ ทุกโปรแกรมตรงกัน (ยกเว้น t_illegal ที่ cpuSim รับไม่ได้) |
-| race_ctrl, boot ROM, ปุ่ม, 7-seg, LED, VGA, top.v | ✅ ผ่าน simulation ทั้งบอร์ด (แข่ง 6 กรณีเวลาตรงสูตร, ภาพจอถูกต้อง) |
-| Smoke test (M0) และตัวเต็มบนบอร์ดจริง | ⏳ **ยังไม่เคยรันบน Vivado** รอเพื่อน |
-| เว็บ CPU Race Lab (`web/`) | ✅ ใช้ได้แบบ offline ตัวจำลองตรงกับ RTL |
-| UART + เว็บ CPU Race Live (`web-live/`) | ✅ ผ่าน simulation (เว็บคุยกับ top.v ผ่าน UART) ⏳ ต้อง build bitstream ใหม่แล้วลองกับบอร์ดจริง |
-
-ลำดับงานต่อจากนี้อยู่ใน [`spec.md`](spec.md) หัวข้อ 0.1 และ 15
+| **Assembler, Reference Model และชุดทดสอบ 13 โปรแกรม** | ✅ เสร็จสมบูรณ์และใช้งานได้ 100% |
+| **Single-cycle MIPS CPU (`rtl/single/`)** | ✅ ผ่าน Simulation ครบทุกคำสั่ง |
+| **Multicycle MIPS CPU + 12-State FSM (`rtl/multi/`)** | ✅ ผ่าน Simulation ครบทุกคำสั่งและจำนวน Step ตรงตามสเปค |
+| **ตัวตรวจคำตอบ `cpuSim V7` ของอาจารย์ (`cpusim_adapter.py`)** | ✅ ตรวจสอบตรงกันครบทุกโปรแกรม |
+| **ระบบควบคุมการแข่ง, Boot ROM, ปุ่มกด, 7-Seg, LED และจอ VGA (`top.v`)** | ✅ ผ่าน Simulation ทั้งบอร์ด (เวลาจบตรงสูตรคำนวณทั้ง 6 กรณี และสร้างภาพจอ VGA ได้ถูกต้อง) |
+| **การสังเคราะห์วงจรและรันบนบอร์ดจริง (Vivado 2025.2)** | ✅ **Build ผ่าน (`0 Error`, `WNS +19.195 ns`) และทดสอบรันจริงบนบอร์ด Nexys A7-100T ออกจอ VGA สำเร็จแล้ว** |
+| **เว็บจำลอง CPU Race Lab (`web/`)** | ✅ ใช้งานได้แบบ Offline สมบูรณ์ ตัวจำลอง `engine.js` ตรงกับ RTL ทุกประการ |
+| **ระบบเชื่อมต่อบอร์ดสดผ่าน UART (`web-live/` + `uart_*.v`)** | ✅ ผ่านการทดสอบคุยกับ `top.v` ใน Simulation ครบ 14 รายการ (`test_uart.js`) |
