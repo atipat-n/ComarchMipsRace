@@ -482,18 +482,20 @@ tb_cpu: core=multi done=1 retired=5 cycles=21
 
 จุดพลิก: 21(10 + ov) = 5(50 + ov) → ov = 2.5
 
-**โปรแกรม demo** (ผลจาก ref_model, สเปคหัวข้อ 14):
+**โปรแกรม demo** (ผลจาก `race_calc.py` และจำลองทั้งบอร์ดแล้ว, สเปคหัวข้อ 14):
 
 | โปรแกรม | คำสั่ง | step | CPI | multi เริ่มแพ้ที่ |
 |---|---|---|---|---|
 | A: บวก 1..10 | 56 | 203 | 3.63 | ov ≥ 6 |
-| B: รวม array 8 ตัว | 53 | 203 | 3.83 | ov ≥ 5 |
+| B: รวม array 8 ตัว (lw เยอะ) | 37 | 147 | 3.97 | ov ≥ 4 |
 
-ยิ่ง CPI ของ multi ต่ำ (มี beq / j เยอะ) multi ยิ่งทนต่อ ov ได้มาก
+ยิ่ง CPI ของ multi ต่ำ (มี beq / j เยอะ) multi ยิ่งทนต่อ ov ได้มาก **ที่ ov = 4 โปรแกรม A ให้ multi ชนะ แต่โปรแกรม B ให้ single ชนะ** นี่คือไฮไลต์ของ demo (ดู [`demo_script.md`](demo_script.md))
 
 ### 🔴 ในโค้ดของเรา
 - `retired` ของ single = จำนวน clock ที่ใช้, `mc_steps` ของ ref_model = จำนวน clock ของ multi `run_all.py` เช็กทั้งสองค่านี้กับ RTL ทุกโปรแกรม
-- วงจรคุมการแข่ง (`rtl/race/race_ctrl.v`, ยังไม่ได้ทำ) จะมีนาฬิการ่วม `time` แล้วปล่อย `en` ให้ single ทุก 50+ov หน่วย และให้ multi ทุก 10+ov หน่วย (สเปคหัวข้อ 9.3)
+- วงจรคุมการแข่ง `rtl/race/race_ctrl.v` มีนาฬิการ่วม `time_now` แล้วปล่อย `en` ให้ single ทุก 50+ov หน่วย และให้ multi ทุก 10+ov หน่วย (สเปคหัวข้อ 9.3) ตัวแปร `next_s` / `next_m` จำว่าแต่ละตัวจะเดินครั้งถัดไปเมื่อไร
+- ลองคำนวณเองได้: `python tools/race_calc.py programs/demoA_alu_heavy.s` จะได้ตารางผู้ชนะทุกค่า ov
+- ลองดูภาพจอจริงที่วงจรสร้างได้: `python sim/vga_frame.py --prog B --ov 4` (ภาพอยู่ใน `build/frames/`)
 
 > 💡 **ov ในโลกจริงคืออะไร?** ทุกครั้งที่ข้อมูลผ่าน register ต้องรอให้ flip-flop "ล็อกค่า" ให้เสร็จ (setup time + clock-to-Q delay) รวมถึง clock ที่ไปถึงแต่ละจุดไม่พร้อมกันเป๊ะ (clock skew) เวลาส่วนนี้ไม่ได้ทำงานอะไรเลย แบ่ง step ยิ่งเยอะ ยิ่งเสียเวลาส่วนนี้บ่อย
 
@@ -533,13 +535,15 @@ tb_cpu: core=multi done=1 retired=5 cycles=21
 
 **ทำไม memory ของ CPU ต้องเป็น LUTRAM ไม่ใช่ BRAM?** BRAM อ่านแล้วได้ค่า "clock ถัดไป" แต่ single-cycle ต้องอ่านแล้วได้ค่า "ทันที" ภายใน clock เดียว LUTRAM อ่านได้ทันที (asynchronous read) (`rtl/mem/lutram.v`, สเปคหัวข้อ 5.2)
 
-**ทดสอบยังไงว่าถูก?** เทียบ 3 ทาง:
+**ทดสอบยังไงว่าถูก?** เทียบ 4 ทาง:
 
 ```
          ┌─► ref_model.py (Python เขียนตรงๆ ตามความหมายของคำสั่ง)  ─┐
- .s ─► asm ┼─► single_cycle_cpu (Verilog)                            ├─► ต้องตรงกันทุก register
-         └─► multi_cycle_cpu  (Verilog)                              ─┘   ทุก word และจำนวน clock
+ .s ─► asm ┼─► cpuSim V7 ของอาจารย์ (ผ่าน cpusim_adapter.py)          │
+         ├─► single_cycle_cpu (Verilog)                            ├─► ต้องตรงกันทุก register
+         └─► multi_cycle_cpu  (Verilog)                            ─┘   ทุก word และจำนวน clock
        + ค่าที่คนคิดเองในบรรทัด #! expect
+       + จำลองทั้งบอร์ด (top.v) แข่งจริง แล้วเช็กเวลาจบกับสูตร
 ```
 
 > 💡 เราลองทำ ALU ให้พังโดยตั้งใจ (`slt` ไม่จัดการกรณีลบแล้วล้น) แล้วรันเทสต์ ปรากฏว่าทั้งเทสต์ระดับ ALU และเทสต์ `t_slt` ฟ้องทันที แปลว่าชุดเทสต์จับบั๊กได้จริง ไม่ใช่แค่ "ผ่านเพราะไม่ได้เช็กอะไร"

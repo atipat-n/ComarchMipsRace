@@ -14,7 +14,11 @@ cpu-race/
 │   ├── common/    ชิ้นส่วนที่ใช้ร่วมกัน: ALU, register file, sign-extend
 │   ├── single/    single-cycle CPU
 │   ├── multi/     multicycle CPU + FSM
-│   ├── mem/       หน่วยความจำ (LUTRAM)
+│   ├── mem/       หน่วยความจำ (LUTRAM), boot ROM, ตัวโหลดโปรแกรม
+│   ├── race/      ตัวคุมการแข่ง (นาฬิการ่วม)
+│   ├── io/        ปุ่ม (debounce), 7-seg
+│   ├── vga/       จอ VGA (timing + วาดภาพ)
+│   ├── top.v        รวมทุกอย่างลงบอร์ด
 │   └── top_smoke.v  วงจรทดสอบบอร์ด (สวิตช์ → LED)
 ├── programs/    โปรแกรม assembly ที่จะให้ CPU รัน
 │   ├── tests/     เทสต์ทีละคำสั่ง
@@ -24,6 +28,7 @@ cpu-race/
 ├── tools/       เครื่องมือ Python: assembler, reference model, สร้างไฟล์ขา
 ├── fpga/        สคริปต์ Vivado (ใช้ที่เครื่องเพื่อน)
 ├── constr/      ไฟล์ขา (.xdc) ของบอร์ด
+├── mem/         ไฟล์ที่ฝังลงชิป: โปรแกรม demo, ฟอนต์, ภาพพื้นหลัง, template ตัวหนังสือ
 └── build/       ไฟล์ที่เครื่องมือสร้างขึ้น ลบทิ้งได้ทุกเมื่อ
 ```
 
@@ -268,9 +273,29 @@ fpga\run.bat smoke program    ← build แล้วโหลดลงบอร�
 | โยก SW0–SW3 | 7-seg หลักซ้ายสุดแสดงเลขฐานสิบหกของสวิตช์ 4 ตัวนั้น |
 | กด CPU_RESETN (ปุ่มแดง) | ตัวนับกลับเป็น 0 |
 
-### 6.4 สิ่งที่ต้องส่งกลับมา
+### 6.4 ตัวเต็ม (CPU Race)
 
-โฟลเดอร์ `build\smoke\` ทั้งหมด **ยกเว้น** `.bit`:
+```
+fpga\run.bat top program
+```
+
+ใช้เวลานานกว่า smoke (ประมาณ 5–15 นาที เพราะมีภาพพื้นหลังใน BRAM) ผลอยู่ใน `build\top\`
+
+**ผลที่ควรเห็นบนบอร์ด:**
+
+| ทำอะไร | ควรเห็น |
+|---|---|
+| หลังโหลด bitstream | จอ VGA ขึ้นภาพ datapath สองฝั่ง + `PROG A  OV 0  TIME 00000000`, LED[14:0] มีดวงเดียวติดที่ตำแหน่ง S0 (LED0) |
+| SW15 = 0 แล้วกด BTNC | TIME เพิ่มทีละเหตุการณ์ (0A, 14, 1E, ...) เส้นบนจอเปลี่ยน, LED state ของ multi เลื่อน |
+| SW15 = 1, SW14–12 = 011 แล้วกด BTNR | วิ่งเองประมาณ 15 วินาที จบแล้วขึ้น WINNER, LED15 / LED14 ติด |
+| โยก SW3–0, SW4 แล้วกด BTNL | เริ่มใหม่ด้วย ov / โปรแกรมใหม่ |
+| กด BTNU | 7-seg สลับระหว่างจำนวนคำสั่ง กับเวลา (ซ้าย 4 หลัก = single, ขวา 4 หลัก = multi) |
+
+ตัวเลขที่ควรได้ของแต่ละกรณีอยู่ใน [`demo_script.md`](demo_script.md)
+
+### 6.5 สิ่งที่ต้องส่งกลับมา
+
+โฟลเดอร์ `build\smoke\` หรือ `build\top\` ทั้งหมด **ยกเว้น** `.bit`:
 
 | ไฟล์ | ดูอะไร |
 |---|---|
@@ -279,7 +304,7 @@ fpga\run.bat smoke program    ← build แล้วโหลดลงบอร�
 | `utilization.rpt` | ใช้ LUT, FF, BRAM ไปเท่าไร |
 | `vivado.log` | log เต็ม ไว้หาสาเหตุเวลามีปัญหา |
 
-### 6.5 ไฟล์ขา (.xdc)
+### 6.6 ไฟล์ขา (.xdc)
 
 **ห้ามแก้ `constr/*.xdc` ด้วยมือ** ถ้าต้องเพิ่มขา ให้แก้รายชื่อ port ใน `tools/make_xdc.py` แล้วรัน
 
@@ -288,6 +313,30 @@ python tools/make_xdc.py smoke    # หรือ full
 ```
 
 สคริปต์จะ uncomment บรรทัดจากไฟล์ต้นฉบับของ Digilent ให้ ซึ่งกันพิมพ์ขาผิด (เช่น SW8, SW9 ใช้ไฟ 1.8 V ต่างจากขาอื่นที่เป็น 3.3 V)
+
+---
+
+### 6.7 แก้โปรแกรม demo หรือหน้าจอ
+
+ไฟล์ใน `mem/` ถูกฝังลง bitstream ตอน build ถ้าแก้ `programs/demo*.s` หรือ `tools/gen_screen.py` ต้องสร้างใหม่ก่อนส่งให้เพื่อน:
+
+```
+python tools/build_mems.py       # สร้าง mem/progA.mem, progB.mem, font.mem, bg.mem, text.mem
+python tools/race_calc.py programs/demoA_alu_heavy.s   # ดูว่าผลพลิกที่ ov เท่าไร
+python sim/run_all.py            # ต้อง ALL PASS ก่อนส่ง
+python sim/vga_frame.py --prog A --ov 0                # ดูภาพจอจริงจาก simulation
+```
+
+### 6.8 เครื่องมือจำลองทั้งบอร์ด (ไม่ต้องมีบอร์ด)
+
+| คำสั่ง | ทำอะไร |
+|---|---|
+| `python sim/vga_frame.py` | จำลองทั้งบอร์ด (`rtl/top.v`) แข่งโปรแกรม A ที่ ov=0 จนจบ แล้วถ่ายภาพจอเป็น PNG ใน `build/frames/` |
+| `python sim/vga_frame.py --prog B --ov 4` | เปลี่ยนโปรแกรม / ov |
+| `python sim/vga_frame.py --units 900` | หยุดกลางทางที่เวลา 900 แล้วถ่าย |
+| `python sim/vga_frame.py --steps 5` | ใช้ step mode กด BTNC 5 ครั้งแล้วถ่าย |
+| `python tools/race_calc.py <ไฟล์.s>` | ตารางเวลา single / multi ทุกค่า ov และจุดพลิก |
+| `python tools/cpusim_adapter.py <ไฟล์.s>` | รันบน cpuSim ของอาจารย์ (โชว์บรรทัดที่ส่งให้ cpuSim และค่า register) |
 
 ---
 
@@ -315,8 +364,9 @@ python tools/make_xdc.py smoke    # หรือ full
 | Assembler, reference model, ชุดเทสต์ | ✅ ใช้ได้ |
 | Single-cycle CPU (M1) | ✅ ผ่าน simulation |
 | Multicycle CPU (M4) | ✅ ผ่าน simulation จำนวน step ถูก |
-| Smoke test บอร์ด (M0) | เขียนแล้ว ยังไม่ได้รันบน Vivado |
-| race_ctrl, VGA, 7-seg, top.v | ยังไม่เริ่ม |
-| cpuSim adapter, เว็บ | ยังไม่เริ่ม |
+| cpuSim adapter (ตัวตรวจทางที่ 4) | ✅ ทุกโปรแกรมตรงกัน (ยกเว้น t_illegal ที่ cpuSim รับไม่ได้) |
+| race_ctrl, boot ROM, ปุ่ม, 7-seg, LED, VGA, top.v | ✅ ผ่าน simulation ทั้งบอร์ด (แข่ง 6 กรณีเวลาตรงสูตร, ภาพจอถูกต้อง) |
+| Smoke test (M0) และตัวเต็มบนบอร์ดจริง | ⏳ **ยังไม่เคยรันบน Vivado** รอเพื่อน |
+| UART + เว็บ (stretch) | ยังไม่ทำ |
 
 ลำดับงานต่อจากนี้อยู่ใน [`spec.md`](spec.md) หัวข้อ 0.1 และ 15

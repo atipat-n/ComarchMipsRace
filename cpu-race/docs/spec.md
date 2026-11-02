@@ -29,8 +29,9 @@
 | ที่เก็บไฟล์ | **เก็บทุกไฟล์ในโฟลเดอร์เดียวผ่าน VS Code บนเครื่องผู้ใช้ก่อน** ยังไม่ขึ้น Git/GitHub ไว้ค่อยตัดสินใจทีหลัง |
 | cpuSim | **ได้ไฟล์แล้ว** อยู่ใน `Slide/ExampleFromProf/` (รุ่น `main32V7`) ตัดสินใจวิธีใช้แล้วในหัวข้อ 2.3 |
 | ที่อยู่โปรเจค | **`D:\Comarch2\Project\cpu-race\`** (ย้ายเข้า `Project/` ตามที่ผู้ใช้ขอ 2 พ.ย.) สไลด์และไฟล์ของอาจารย์ยังอยู่ที่ `D:\Comarch2\Slide\` |
-| ทำแล้ว (2 พ.ย.) | โครงโปรเจค, ไฟล์ M0 (เขียนแล้ว **ยังไม่ได้รันบน Vivado**), **M1 และ M4 ผ่านใน simulation** (`python sim/run_all.py` = ALL PASS: tb_common + 10 test + ตัวอย่าง + demo A/B, ทั้ง single และ multi ตรง ref_model ทุก register/data memory และจำนวน cycle ตรงหัวข้อ 8.3), `docs/wire_map.md` ร่างแรก, คู่มือ `docs/manual.md` + บทเรียน `docs/tutorial.md` |
-| ขั้นต่อไป | `race_calc.py` + ปรับโปรแกรม demo → `cpusim_adapter.py` → งานวาดภาพ datapath + `vga_timing`/`tb_vga_frame` (ดูหัวข้อ 15) |
+| ทำแล้ว (2 พ.ย.) | **ทั้งระบบเสร็จใน simulation:** single + multi + race_ctrl + boot ROM/loader + ปุ่ม/7-seg/LED + VGA (ภาพ datapath สร้างด้วยโค้ด, ตัวหนังสือ, แถบแข่ง) รวมใน `rtl/top.v` · `python sim/run_all.py` = ALL PASS: เทียบ 4 ทาง (ref_model, cpuSim ของอาจารย์, single, multi) + จำลองทั้งบอร์ดแข่ง demo A/B 6 กรณี เวลาจบตรงสูตร · ภาพจอจริงจาก simulation อยู่ใน `build/frames/` · เอกสาร: `manual.md`, `tutorial.md`, `wire_map.md`, `demo_script.md` |
+| **ยังไม่ได้ทดสอบ** | **ยังไม่เคย build บน Vivado** (เครื่องผู้ใช้ไม่มี): MMCM ใน `clk_gen.v`, timing ที่ 25 MHz, การ infer BRAM/LUTRAM, ขา VGA จะรู้ผลตอนเพื่อนรัน `fpga\run.bat top` |
+| ขั้นต่อไป | เพื่อนรัน `fpga\run.bat smoke program` แล้ว `fpga\run.bat top program` → ส่ง `build/<target>/` กลับมาอ่าน → แก้ตาม log → ซ้อมตาม `docs/demo_script.md` → อัดคลิปสำรอง · (stretch) UART + เว็บ |
 
 **กติกาการทำงานช่วงนี้ (สำหรับ AI และทีม):**
 - ทำงานในโฟลเดอร์ `Project/cpu-race/` ตามโครงในหัวข้อ 13 **ไม่ต้อง `git init` ไม่ต้อง commit หรือ push** จนกว่าผู้ใช้จะสั่ง
@@ -51,6 +52,10 @@
 | D3 | cpuSim | ใช้ `main32V7` ที่มีในมือ **ไม่แก้ไฟล์ต้นฉบับของอาจารย์** copy ไว้ใน `tools/third_party/cpusim_v7/` แล้วให้ `cpusim_adapter.py` ครอบ: แปลงชื่อ register และ `j halt`→`HALT`, เติม SUB/AND/OR/SLT ที่ cpuSim ไม่มี, แก้บั๊ก ADD (ใช้ `ops[3]`) โดย monkeypatch ใน adapter | เลือกรุ่นเองได้ ไม่ต้องรอ V7.1 และไม่ต้องไปขอไฟล์ใหม่ |
 | D4 | เว็บ | ทำเป็น **เว็บ local บนคอมผู้ใช้** (ดูหัวข้อ 11) ต่อบอร์ดผ่าน USB-UART ด้วย Web Serial ที่ `localhost` และมี **โหมด Mock** ไว้พัฒนาโดยไม่มีบอร์ด | ตอบโจทย์ "ต่อเข้าคอมขึ้นเว็บ" โดยไม่ต้องมี server ภายนอก |
 | D5 | Demo หลัก | ยังคงเป็น **บอร์ด → VGA → จอ** แบบ standalone ไม่พึ่งคอม เว็บเป็นส่วนเสริม (M6) | กันความเสี่ยงห้องนำเสนอไม่มีเน็ตหรือคอมมีปัญหา |
+| D6 | ภาพ datapath บนจอ | **วาดด้วยโค้ด** (`tools/gen_screen.py`) แทนการวาดใน PowerPoint ทุกเส้นมี wire-ID ตาม `docs/wire_map.md` ไม่มี anti-aliasing ฟอนต์ 8×16 render จาก Consolas (`tools/gen_font.py`) | ต้องเสร็จภายในวันเดียว (ผู้ใช้ขอ 2 พ.ย.), แก้ตำแหน่งเส้นได้ง่ายและไม่มีปัญหาสีเพี้ยน |
+| D7 | Clock | ใช้ primitive `MMCME2_BASE` + `BUFG` ใน `rtl/clk_gen.v` (100→25 MHz) แทน Clocking Wizard; simulation ใช้ `-DSIM` ข้าม MMCM | ไม่ต้องสร้าง IP, build ด้วยสคริปต์ล้วนได้ |
+| D8 | โปรแกรม demo | A = บวก 1..10 (พลิกที่ ov=6), B = รวม array คลี่ลูปทีละ 2 (พลิกที่ ov=4) ⇒ ที่ ov=4 ผู้ชนะต่างกันตามโปรแกรม (หัวข้อ 14) | ได้เรื่องเล่าที่ชัดกว่า "พลิกที่ ov=4" อย่างเดียว |
+| D9 | ทดสอบทั้งบอร์ด | `sim/tb_top.v` จำลอง `top.v` ทั้งตัว (ปุ่ม, loader, race, VGA) และจับภาพจอเป็น PNG ได้ (`sim/vga_frame.py`) | ตรวจหน้าจอได้โดยไม่ต้องมีบอร์ด |
 
 ---
 
@@ -386,6 +391,15 @@ next_m     : เวลาที่ multi จะเดินครั้งถั
 **Multicycle (`active_m`):** ทำแบบเดียวกันแต่ตัดสินจาก **state** เช่น S0 ไฮไลต์ PC→mux IorD→Memory→IR และ PC→ALU (+4)→PC, S3 ไฮไลต์ ALUOut→mux IorD→Memory→MDR ฯลฯ ตาราง state × wire **ร่างแรกอยู่ใน `docs/wire_map.md` แล้ว (26 บิต ทำใน RTL แล้ว)** ปรับได้ตอนวาดรูป
 
 ### 10.4 Layout ของจอ
+
+**ที่ทำจริง (2 พ.ย.):** ภาพจริงจาก simulation ดูได้ด้วย `python sim/vga_frame.py` (ผลใน `build/frames/`)
+- แถว 0: ชื่อ, PROG A/B, OV, TIME · แถว 2: หัวข้อสองฝั่ง + ชื่อ state ของ multi
+- y 32–351: ภาพ datapath ที่ **สร้างด้วยโค้ด** (`tools/gen_screen.py`, การตัดสินใจ D6) ซ้าย single ขวา multi
+- แถว 22–23: PC, IR + ชื่อคำสั่ง, RETIRED, TIME, สถานะ WINNER / TIE / FINISH · แถว 24–25: แถบแข่ง (ยาว ≈ เวลา/12 px)
+- แถว 26–28: `$t0..$t7` ของทั้งสอง core · แถว 29: วิธีใช้สวิตช์/ปุ่ม
+- ตัวหนังสือมาจาก template (`mem/text.mem`) ที่บอกว่าช่องไหนเป็นตัวอักษรคงที่ ช่องไหนเป็นเลข hex ของค่าไหน (รูปแบบอยู่ต้นไฟล์ `rtl/vga/vga_renderer.v`)
+
+ร่างเดิม:
 ```
 y=0   ┌────────────────────────────────────────────────────────────┐
       │ SINGLE-CYCLE  vs  MULTICYCLE      Program: A   ov=0        │ (32 px)
@@ -406,19 +420,20 @@ y=480 └───────────────────────�
 ### 10.5 7-seg, LED, สวิตช์, ปุ่ม
 | อุปกรณ์ | หน้าที่ |
 |---|---|
-| 7-seg หลัก 7–4 | single: retired count (hex) / time (สลับด้วย BTNU) |
+| 7-seg หลัก 7–4 | single: retired count (hex) / time (สลับด้วย BTNU) มีจุดคั่นระหว่างหลัก 4 กับ 3 |
 | 7-seg หลัก 3–0 | multi: retired count (hex) / time |
 | LED[15] / LED[14] | single done / multi done |
+| LED[13] / LED[12] | กำลังวิ่ง (run mode) / โปรแกรมที่โหลดอยู่คือ B |
 | LED[11:0] | state ของ multicycle แบบ one-hot (S0–S11) |
-| SW[3:0] | overhead `ov` 0–15 |
-| SW[4] | เลือกโปรแกรม demo A / B (มีผลตอนกด reset) |
-| SW[14:12] | ความเร็วใน run mode |
+| SW[3:0] | overhead `ov` 0–15 (เปลี่ยนกลางทางได้ มีผลกับ step ถัดไป) |
+| SW[4] | เลือกโปรแกรม demo A / B (มีผลตอนกด BTNL หรือ CPU_RESETN) |
+| SW[14:12] | ความเร็วใน run mode: 0=20, 1=50, 2=100, 3=200, 4=400, 5=1000, 6=4000 หน่วยเวลา/วินาที, 7=เร็วสุด (แนะนำ 3: demo A ใช้ ~15 วินาที) |
 | SW[15] | 0 = step, 1 = run |
 | BTNC | step (กระโดดไปเหตุการณ์ถัดไป) |
 | BTNR | run / pause |
 | BTNL | reset core: copy โปรแกรมจาก ROM ลง RAM, PC=0, reg=0, time=0 |
 | BTNU | สลับสิ่งที่ 7-seg แสดง |
-| CPU_RESETN | reset ทั้งระบบ |
+| CPU_RESETN | reset ทั้งระบบ แล้วโหลดโปรแกรมให้อัตโนมัติ (เปิดเครื่องมาก็พร้อมเล่น) |
 
 - ปุ่มทุกปุ่มต้องผ่าน debounce (ประมาณ 10–20 ms) และ edge detect
 - 7-seg ต้องสแกนทีละหลักที่ประมาณ 1 kHz ต่อหลัก
@@ -494,7 +509,8 @@ Project/cpu-race/          ← (D:\Comarch2\Project\cpu-race)
 │   ├── mem/      lutram.v  boot_rom.v  mem_loader.v
 │   ├── race/     race_ctrl.v
 │   ├── io/       debounce.v  sevenseg.v  uart_rx.v  uart_tx.v  uart_cmd.v  (audio_pwm.v)
-│   ├── vga/      vga_timing.v  vga_renderer.v  font_rom.v  text_overlay.v
+│   ├── vga/      vga_timing.v  vga_renderer.v (รวม ROM ภาพ/template/ฟอนต์ และ text overlay)
+│   ├── clk_gen.v          ← MMCM 100→25 MHz (D7)
 │   ├── top.v
 │   └── top_smoke.v        ← M0: สวิตช์ → LED ไว้เช็กว่า build + โหลดบอร์ดได้
 ├── fpga/    build.tcl  program.tcl  run.bat   ← Vivado batch non-project mode (ผลอยู่ใน build/<target>/)
@@ -505,8 +521,9 @@ Project/cpu-race/          ← (D:\Comarch2\Project\cpu-race)
 │   ├── demoB_mem_heavy.s
 │   ├── examples/  ex_lw_add.s   ← ตัวอย่างประกอบบทเรียน
 │   └── tests/  t_add.s  t_sub.s  t_and_or.s  t_slt.s  t_addi.s  t_lw_sw.s  t_beq.s  t_j.s  t_factorial.s  t_illegal.s
-├── sim/     tb_common.v  tb_cpu.v (single หรือ multi ด้วย -DMULTI)  tb_race.v  tb_vga_frame.v  run_all.py
-├── tools/   asm.py  ref_model.py  make_xdc.py  cpusim_adapter.py  img2mem.py  race_calc.py  send.py  palette.json
+├── sim/     tb_common.v  tb_cpu.v (single/multi)  tb_top.v (ทั้งบอร์ด: แข่ง + จับภาพจอ)  run_all.py  trace.py  vga_frame.py
+├── tools/   asm.py  ref_model.py  race_calc.py  cpusim_adapter.py  make_xdc.py  gen_font.py  gen_screen.py  build_mems.py
+│            third_party/cpusim_v7/  (cpuSim ของอาจารย์ ไม่แก้ไข)
 └── web/     index.html  app.js  style.css  pyodide/
 ```
 
@@ -529,13 +546,13 @@ Project/cpu-race/          ← (D:\Comarch2\Project\cpu-race)
 **โปรแกรม demo**
 - **A (ALU heavy):** บวก 1..10 ด้วย `addi`, `add`, `slt` หรือ `beq` และ `j` วนลูป ⇒ multi ชนะตอน ov=0 แต่แพ้ตอน ov สูง **จุดพลิกจริงขึ้นกับ CPI เฉลี่ยของลูป** (multi ชนะเมื่อ `CPI_เฉลี่ย × (10+ov) < 50+ov`; ถ้าเฉลี่ย 3.7 step จุดพลิกอยู่ที่ ov≈4.8 ไม่ใช่ 4) ให้ใช้ `race_calc.py` ปรับลูปให้พลิกตรงค่า ov ที่อยากโชว์ก่อนจะระบุตัวเลขในสไลด์
 - **B (memory heavy):** เอา array 8 ตัวใน `.data` มารวมกันด้วย `lw` แล้ว `sw` ผลลัพธ์ ⇒ ช่องว่างแคบกว่าโปรแกรม A มาก เพราะ lw เสมอกันตั้งแต่ ov=0 (ผลจริงขึ้นกับสัดส่วน lw:addi:beq ในลูป ใช้ `race_calc.py` เลือกขนาด array ให้ผลพลิกตรงจุดที่อยากโชว์)
-- **ผลจากร่างแรก (ref_model, 2 พ.ย.):** ⚠️ ยังไม่ได้ผลตามที่ตั้งใจ ต้องปรับตอนทำ `race_calc.py`
-  | โปรแกรม | คำสั่ง | step multi | CPI multi | ov=0 single / multi | ov=4 single / multi | multi เริ่มแพ้ที่ |
+- **ผลจริงที่ล็อกแล้ว (D8, `python tools/race_calc.py`, ยืนยันด้วยการจำลองทั้งบอร์ดใน `run_all.py`):**
+  | โปรแกรม | คำสั่ง | step multi | CPI multi | ov=0 single / multi | ov=4 single / multi | single เริ่มชนะที่ |
   |---|---|---|---|---|---|---|
-  | A | 56 | 203 | 3.63 | 2800 / 2030 | 3024 / 2842 (multi ยังชนะ) | ov ≥ 6 |
-  | B | 53 | 203 | 3.83 | 2650 / 2030 | 2862 / 2842 (เฉือนกัน 20 unit) | ov ≥ 5 |
-  - ตรงข้ามกับที่คาด: **B พลิกเร็วกว่า A** เพราะลูปของ A มี `beq`/`j` (3 step) เยอะ ส่วนลูปของ B มี `lw` (5 step) ช่วยดัน CPI ขึ้น
-  - ทางเลือกตอนทำ race_calc: (ก) เพิ่มคำสั่ง R-type ในลูปของ A ให้ CPI เข้าใกล้ 4 จะพลิกที่ ov=4 ตามสคริปต์นำเสนอ หรือ (ข) เปลี่ยนสคริปต์นำเสนอให้โยก ov ไปที่ 6
+  | A (ALU heavy) | 56 | 203 | 3.63 | 2800 / **2030** | 3024 / **2842** | ov = 6 |
+  | B (memory heavy, คลี่ลูปทีละ 2) | 37 | 147 | 3.97 | 1850 / **1470** | **1998** / 2058 | ov = 4 |
+  - **เรื่องที่ใช้เล่า:** ที่ ov=4 เดียวกัน โปรแกรม A ให้ multi ชนะ แต่โปรแกรม B ให้ single ชนะ ⇒ ผลแข่งขึ้นกับสัดส่วนคำสั่ง (CPI) ไม่ใช่แค่ตัว CPU
+  - A มี `beq`/`j` (3 step) เยอะ CPI ต่ำ multi จึงทน ov ได้ถึง 5; B มี `lw` (5 step) CPI เกือบ 4 จึงพลิกเร็วกว่า
 - **factorial:** ไม่มีคำสั่งคูณ ใช้บวกซ้ำแทน (ใช้ทดสอบความถูกต้องเท่านั้น ไม่ใช้ demo หลัก)
 
 ---
@@ -555,7 +572,7 @@ Project/cpu-race/          ← (D:\Comarch2\Project\cpu-race)
 | M6 | UART + เว็บ + compare กับ cpuSim | โหลดโปรแกรมจากเว็บแล้วเทียบผลได้ | Stretch |
 | M7 | เสียง + ตกแต่ง + ซ้อม + อัดคลิปสำรอง | พร้อมนำเสนอ | – |
 
-**ความคืบหน้า (2 พ.ย. 2569):** M0 = เขียนไฟล์แล้ว รอรันบน Vivado · M1 = ✅ ผ่านใน sim · M4 = ✅ ผ่านใน sim (จำนวน step ตรงทุกโปรแกรม) · ที่เหลือยังไม่เริ่ม
+**ความคืบหน้า (2 พ.ย. 2569):** M1, M3, M4, M5 = ✅ ครบใน simulation (ทั้งบอร์ดจำลองได้ รวม VGA) · M0, M2, M3, M5 บนบอร์ดจริง = รอเพื่อนรัน Vivado · M6 (UART/เว็บ) = ยังไม่ทำ · M7 = มีสคริปต์นำเสนอ `docs/demo_script.md` แล้ว
 
 **ทำขนานกันได้:** M1 กับ M4 เริ่มพร้อมกันได้เลย เพราะใช้ `rtl/common/` ชุดเดียวกัน และงานวาดภาพ datapath กับ `vga_timing.v` เริ่มได้ตั้งแต่วันแรก
 
@@ -625,6 +642,7 @@ module xxx_cpu (
 | ภาพ datapath มี anti-aliasing ทำให้สีเพี้ยน | export โดยปิด anti-alias, `img2mem.py` ต้องเตือนถ้าเจอสีที่ไม่อยู่ใน palette |
 | Multicycle ไม่ทัน | M3 (single + จอ) คือ MVP ที่นำเสนอได้แล้ว |
 | เว็บหรือ UART ไม่ทัน | boot ROM ทำให้ demo ได้โดยไม่ต้องต่อคอม และมี `send.py` เป็นแผนสำรอง |
+| Build บน Vivado ครั้งแรกเจอ error (ยังไม่เคย build ตัวเต็ม) | ส่ง `build/top/` (log + รายงาน) กลับมาอ่าน, จุดที่น่าจะเจอ: MMCM, timing ของ single-cycle, BRAM ของภาพพื้นหลัง (~50 BRAM36 จาก 135) |
 | ผลไม่ตรงกับ cpuSim | เทียบกับ `ref_model.py` ก่อน ดูว่าต่างที่ ISA (เช่น funct ของ slt) หรือเป็น bug |
 | ทีมรวมงานแล้วพัง | ล็อก interface ในหัวข้อ 16 ตั้งแต่วันแรก ทุกคนส่ง testbench มาพร้อมโค้ด (ตอนนี้ยังไม่ใช้ Git: ส่งเป็น zip ที่มีวันที่ในชื่อ และบอกกันก่อนแก้ไฟล์ของคนอื่น) |
 | ปัญหา build/ขา/ไดรเวอร์ถูกค้นพบครั้งแรกตอนท้ายโปรเจค (เพราะตั้งใจต่อบอร์ดทีหลังสุด, D1) | รัน M0 สั้นๆ ตั้งแต่เนิ่นๆ (D2) และเขียน RTL ให้ synthesizable ตั้งแต่ต้น (ไม่ใช้ `initial` แปลกๆ, ไม่ใช้ `#delay` นอก testbench) |

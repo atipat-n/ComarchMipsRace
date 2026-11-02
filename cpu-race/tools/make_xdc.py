@@ -22,9 +22,8 @@ TARGETS = {
     "full": {
         "out": "nexys_a7_100t.xdc",
         "ports": ["CLK100MHZ", "SW", "LED", "CA", "CB", "CC", "CD", "CE", "CF", "CG", "DP", "AN",
-                  "CPU_RESETN", "BTNC", "BTNU", "BTNL", "BTNR", "BTND",
-                  "VGA_R", "VGA_G", "VGA_B", "VGA_HS", "VGA_VS",
-                  "UART_TXD_IN", "UART_RXD_OUT", "AUD_PWM", "AUD_SD"],
+                  "CPU_RESETN", "BTNC", "BTNU", "BTNL", "BTNR",
+                  "VGA_R", "VGA_G", "VGA_B", "VGA_HS", "VGA_VS"],
     },
 }
 

@@ -25,6 +25,7 @@ switch -- $target {
         foreach d {common single multi mem race io vga} {
             foreach f [glob -nocomplain [file join $root rtl $d *.v]] { lappend sources $f }
         }
+        lappend sources [file join $root rtl clk_gen.v]
         lappend sources [file join $root rtl top.v]
         set xdc     [file join $root constr nexys_a7_100t.xdc]
     }
@@ -38,13 +39,17 @@ set out [file join $root build $target]
 file mkdir $out
 cd $out
 
-# ไฟล์ .mem ที่ $readmemh อ้างถึง ให้หาได้จากชื่อไฟล์เปล่าๆ
-foreach f [glob -nocomplain [file join $root mem *.mem]] { file copy -force $f $out }
+# ไฟล์ .mem ที่ $readmemh อ้างถึง ให้หาได้จากชื่อไฟล์เปล่าๆ (copy มาไว้ในโฟลเดอร์ที่รัน และ read_mem ให้ Vivado รู้จัก)
+set mems [glob -nocomplain [file join $root mem *.mem]]
+foreach f $mems { file copy -force $f $out }
 
 puts "== target=$target top=$top part=$part"
 puts "== out=$out"
 
 foreach f $sources { read_verilog $f }
+if {$target ne "smoke"} {
+    foreach f $mems { read_mem [file join $out [file tail $f]] }
+}
 read_xdc $xdc
 
 synth_design -top $top -part $part

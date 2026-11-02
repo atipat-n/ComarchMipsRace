@@ -6,10 +6,12 @@
 แต่ละโปรแกรมใน programs/ และ programs/tests/:
   1. assemble ด้วย tools/asm.py -> build/sim/<name>.mem
   2. รัน tools/ref_model.py แล้วเช็กกับบรรทัด `#! expect ...` ในไฟล์ .s
-  3. รัน tb_cpu ของ single-cycle และ multicycle ด้วย Icarus Verilog แล้ว
+  3. รันบน cpuSim ของอาจารย์ (tools/cpusim_adapter.py) แล้วเทียบกับ ref_model (ข้ามถ้ามีคำสั่ง illegal)
+  4. รัน tb_cpu ของ single-cycle และ multicycle ด้วย Icarus Verilog แล้ว
      - เทียบ state (retired + register + data memory) ทั้งไฟล์กับ ref_model
      - เช็กจำนวน en ที่ใช้: single = จำนวนคำสั่ง, multi = จำนวน step ตามสเปคหัวข้อ 8.3
-ถ้าไม่มี iverilog ข้อ 3 จะถูกข้าม (และรายงานว่าข้าม)
+  5. (เมื่อรันทั้งชุด) จำลองทั้งบอร์ด rtl/top.v แข่งโปรแกรม demo แล้วเช็กเวลาจบกับสูตรสเปคหัวข้อ 9
+ถ้าไม่มี iverilog ข้อ 4-5 จะถูกข้าม (และรายงานว่าข้าม)
 """
 import re
 import shutil
@@ -20,8 +22,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tools"))
 
-import asm         # noqa: E402
-import ref_model   # noqa: E402
+import asm             # noqa: E402
+import ref_model       # noqa: E402
+import cpusim_adapter  # noqa: E402
 
 BUILD = ROOT / "build" / "sim"
 RTL_COMMON = sorted((ROOT / "rtl" / "common").glob("*.v"))
@@ -179,6 +182,14 @@ def main(argv):
         problems += [f"expect {e}" for e in check_expects(expects, m, prog.symbols)]
 
         notes = []
+        try:
+            cs_state, _ = cpusim_adapter.run_words(prog.words, prog.text_words)
+            d = diff_states(ref_state, cs_state)
+            if d:
+                problems.append("cpuSim ไม่ตรง ref_model:\n" + "\n".join(d))
+            notes.append("cpusim!=ref" if d else "cpusim=ref")
+        except cpusim_adapter.Unsupported:
+            notes.append("cpusim n/a")
         for core in cores_ok:
             note, p = run_core(vvp, core, name, mem_path, m, ref_state)
             notes.append(note)
@@ -192,9 +203,37 @@ def main(argv):
             print("       " + p.replace("\n", "\n       "))
         fails += bool(problems)
 
+    if cores_ok and not argv:
+        fails += run_race_tests(iverilog, vvp)
+
     print("-" * 60)
     print("ALL PASS" if fails == 0 else f"{fails} FAIL")
     return 1 if fails else 0
+
+
+RACE_CASES = [("A", 0), ("A", 5), ("A", 6), ("B", 3), ("B", 4), ("B", 15)]
+
+
+def run_race_tests(iverilog, vvp):
+    """จำลองทั้งบอร์ด (top.v + race_ctrl) แล้วเช็กเวลาจบกับสูตรสเปคหัวข้อ 9"""
+    import vga_frame
+    out_dir = BUILD / "top"
+    vvp_file = vga_frame.compile_top(iverilog, out_dir)
+    fails = 0
+    demo = {"A": ROOT / "programs" / "demoA_alu_heavy.s", "B": ROOT / "programs" / "demoB_mem_heavy.s"}
+    for prog, ov in RACE_CASES:
+        m = ref_model.Machine(asm.assemble(demo[prog].read_text(encoding="utf-8")).words).run()
+        want_s, want_m = m.retired * (50 + ov), m.mc_steps * (10 + ov)
+        text = vga_frame.run_top(vvp, vvp_file, out_dir, 0 if prog == "A" else 1, ov)
+        got = dict(re.findall(r"(\w+)=(\d+)", text.split("race:")[1])) if "race:" in text else {}
+        ok = (got.get("done_s") == "1" and got.get("done_m") == "1"
+              and int(got.get("t_s", -1)) == want_s and int(got.get("t_m", -1)) == want_m
+              and int(got.get("ret_s", -1)) == m.retired and int(got.get("ret_m", -1)) == m.retired)
+        winner = "multi" if want_m < want_s else ("tie" if want_m == want_s else "single")
+        print(f"[{'PASS' if ok else 'FAIL'}] race prog {prog} ov={ov:<2} single={want_s:<5} multi={want_m:<5} "
+              f"ผู้ชนะ {winner}" + ("" if ok else f"\n       ได้: {text.strip()}"))
+        fails += not ok
+    return fails
 
 
 if __name__ == "__main__":
