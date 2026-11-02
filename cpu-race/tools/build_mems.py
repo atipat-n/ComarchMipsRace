@@ -27,6 +27,7 @@ def main(argv):
     if "--keep-font" not in argv:
         subprocess.run([sys.executable, str(ROOT / "tools" / "gen_font.py")], check=True)
     subprocess.run([sys.executable, str(ROOT / "tools" / "gen_screen.py")], check=True)
+    subprocess.run([sys.executable, str(ROOT / "tools" / "build_web.py")], check=True)   # เว็บใช้โปรแกรม/ภาพชุดเดียวกัน
 
 
 if __name__ == "__main__":

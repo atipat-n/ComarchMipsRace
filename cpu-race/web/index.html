@@ -1,0 +1,608 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!-- สร้างโดย tools/build_web.py จาก web/page.html ห้ามแก้ไฟล์นี้ -->
+</head>
+<body>
+<title>CPU Race Lab</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: แถบควบคุมบนสุด + แท็บ, หน้า "แข่ง" เป็นสนามสองเลน (ส้ม = single, ฟ้า = multi) เหมือนจอ VGA บนบอร์ด */
+:root {
+  --bg: #edf1f6;
+  --panel: #ffffff;
+  --panel-2: #f5f7fb;
+  --ink: #14213a;
+  --muted: #5a6a82;
+  --line: #d4dce7;
+  --accent: #23338a;
+  --single: #d96400;
+  --single-soft: #ffe8d1;
+  --multi: #0583b0;
+  --multi-soft: #d6f1fb;
+  --wire-off: #c3ccd9;
+  --wire-static: #8d9ab0;
+  --good: #16824c;
+  --bad: #c2352b;
+  --warn: #a8700f;
+  --seg-on: #e2362a;
+  --seg-off: rgba(226, 54, 42, 0.10);
+  --seg-bg: #1b1f27;
+  --f-display: "Chakra Petch", "Leelawadee UI", Tahoma, sans-serif;
+  --f-body: "IBM Plex Sans Thai", "Leelawadee UI", "Segoe UI", Tahoma, sans-serif;
+  --f-mono: "JetBrains Mono", Consolas, "Courier New", monospace;
+  --r: 10px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0b1120; --panel: #121a2e; --panel-2: #0e1528; --ink: #e3e9f4; --muted: #8e9cb4; --line: #243049;
+    --accent: #9aa9ff; --single: #ff9a2e; --single-soft: #3a2711; --multi: #3cc8f5; --multi-soft: #0d3243;
+    --wire-off: #2c3853; --wire-static: #6b7a97; --good: #4bc98a; --bad: #ff6e61; --warn: #e6b04c;
+    --seg-on: #ff4a3d; --seg-off: rgba(255, 74, 61, 0.10); --seg-bg: #07090e;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0b1120; --panel: #121a2e; --panel-2: #0e1528; --ink: #e3e9f4; --muted: #8e9cb4; --line: #243049;
+  --accent: #9aa9ff; --single: #ff9a2e; --single-soft: #3a2711; --multi: #3cc8f5; --multi-soft: #0d3243;
+  --wire-off: #2c3853; --wire-static: #6b7a97; --good: #4bc98a; --bad: #ff6e61; --warn: #e6b04c;
+  --seg-on: #ff4a3d; --seg-off: rgba(255, 74, 61, 0.10); --seg-bg: #07090e;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html, body { background: var(--bg); color: var(--ink); }
+body { font-family: var(--f-body); font-size: 15px; line-height: 1.6; margin: 0; }
+.wrap { max-width: 1280px; margin: 0 auto; padding-inline: 16px; padding-block: 0 48px; }
+h1, h2, h3 { font-family: var(--f-display); line-height: 1.25; text-wrap: balance; margin: 0; }
+h2 { font-size: 1.35rem; }
+h3 { font-size: 1.05rem; }
+p { margin: 0; }
+code, .mono { font-family: var(--f-mono); font-size: 0.92em; }
+a { color: var(--accent); }
+button, select, input, textarea { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.muted { color: var(--muted); }
+.small { font-size: 0.85rem; }
+.num { font-variant-numeric: tabular-nums; }
+
+/* ---------- top bar ---------- */
+.top {
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20;
+  background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--line);
+}
+.top-inner { max-width: 1280px; margin: 0 auto; padding: 10px 16px; display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; }
+.brand { display: flex; align-items: baseline; gap: 10px; margin-right: auto; }
+.brand h1 { font-size: 1.35rem; letter-spacing: 0.02em; }
+.brand h1 .s { color: var(--single); }
+.brand h1 .m { color: var(--multi); }
+.brand span { font-size: 0.8rem; color: var(--muted); }
+.ctl-group { display: flex; align-items: center; gap: 8px; }
+.ctl-group > label, .ctl-label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--panel); }
+.seg button { border: 0; background: transparent; padding: 4px 10px; cursor: pointer; font-size: 0.82rem; font-family: var(--f-mono); }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--panel); }
+nav.tabs { max-width: 1280px; margin: 0 auto; padding: 0 16px; display: flex; gap: 2px; overflow-x: auto; }
+nav.tabs a {
+  text-decoration: none; color: var(--muted); padding: 8px 14px; border-bottom: 2px solid transparent;
+  white-space: nowrap; font-family: var(--f-display); font-weight: 600; font-size: 0.95rem;
+}
+nav.tabs a[aria-current="page"] { color: var(--ink); border-color: var(--ink); }
+
+section.page { display: none; padding-top: 18px; }
+section.page.on { display: grid; gap: 16px; }
+
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); padding: 16px; min-width: 0; }
+.card > h2, .card > h3 { margin-bottom: 8px; }
+.grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+@media (max-width: 900px) { .grid2 { grid-template-columns: 1fr; } }
+.row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.btn {
+  border: 1px solid var(--line); background: var(--panel); border-radius: 8px; padding: 6px 12px; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 6px; font-size: 0.9rem;
+}
+.btn:hover { border-color: var(--ink); }
+.btn.primary { background: var(--ink); color: var(--panel); border-color: var(--ink); }
+.btn:disabled { opacity: 0.45; cursor: default; }
+select, input[type="text"], input[type="number"], textarea {
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px;
+}
+.chip { display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px; border-radius: 999px; font-size: 0.8rem; border: 1px solid var(--line); background: var(--panel-2); }
+.chip.s { border-color: var(--single); color: var(--single); background: var(--single-soft); }
+.chip.m { border-color: var(--multi); color: var(--multi); background: var(--multi-soft); }
+.chip.good { border-color: var(--good); color: var(--good); }
+.chip.bad { border-color: var(--bad); color: var(--bad); }
+
+/* ---------- race ---------- */
+.controls { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.4fr) minmax(0, 1.6fr); gap: 16px; align-items: start; }
+@media (max-width: 1000px) { .controls { grid-template-columns: 1fr; } }
+.ctl-block { display: grid; gap: 6px; min-width: 0; }
+.ovline { display: flex; gap: 10px; align-items: center; }
+.ovline input[type="range"] { flex: 1; accent-color: var(--ink); }
+.ovval { font-family: var(--f-display); font-size: 1.6rem; font-weight: 700; min-width: 2ch; text-align: right; }
+.tlegend { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; font-size: 0.85rem; }
+.tlegend b { font-family: var(--f-mono); font-weight: 600; }
+.predict { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 0.9rem; }
+.predict .btn[aria-pressed="true"] { background: var(--ink); color: var(--panel); }
+
+.scoreboard { display: grid; gap: 10px; }
+.sb-top { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px; align-items: center; }
+.lane { display: grid; grid-template-columns: 92px minmax(0, 1fr) auto; gap: 12px; align-items: center; }
+@media (max-width: 640px) { .lane { grid-template-columns: 70px minmax(0, 1fr); } .lane .lane-r { grid-column: 1 / -1; } }
+.lane-name { font-family: var(--f-display); font-weight: 700; }
+.lane.s .lane-name { color: var(--single); }
+.lane.m .lane-name { color: var(--multi); }
+.track { position: relative; height: 22px; border-radius: 6px; background: var(--panel-2); border: 1px solid var(--line); overflow: hidden; }
+.track .fill { position: absolute; inset: 0 auto 0 0; width: 0; transition: width 0.12s linear; }
+.lane.s .fill { background: var(--single); }
+.lane.m .fill { background: var(--multi); }
+.track .ghost { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--ink); opacity: 0.35; }
+.lane-r { display: flex; gap: 10px; align-items: center; font-size: 0.85rem; white-space: nowrap; }
+.badge { font-family: var(--f-display); font-weight: 700; letter-spacing: 0.06em; padding: 1px 8px; border-radius: 6px; font-size: 0.8rem; }
+.badge.win { background: var(--good); color: var(--panel); }
+.badge.tie { background: var(--warn); color: var(--panel); }
+.badge.fin { border: 1px solid var(--line); color: var(--muted); }
+.badge.run { color: var(--muted); }
+
+.seven { display: inline-flex; gap: 3px; padding: 6px 8px; background: var(--seg-bg); border-radius: 6px; }
+.seven svg { width: 16px; height: 28px; display: block; }
+.seven .on { fill: var(--seg-on); }
+.seven .off { fill: var(--seg-off); }
+.sevenwrap { display: grid; gap: 2px; justify-items: start; }
+.sevenwrap small { font-size: 0.7rem; color: var(--muted); }
+
+.core { display: grid; gap: 10px; align-content: start; }
+.core-head { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; justify-content: space-between; }
+.core-head h2 { font-size: 1.15rem; }
+.core.s h2 { color: var(--single); }
+.core.m h2 { color: var(--multi); }
+.next-ins { font-family: var(--f-mono); font-size: 0.9rem; background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; overflow-x: auto; white-space: nowrap; }
+.next-ins .lbl { font-family: var(--f-body); color: var(--muted); font-size: 0.8rem; margin-right: 8px; }
+.dp { width: 100%; height: auto; display: block; background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; }
+.dp text { font-family: var(--f-mono); font-size: 11px; fill: var(--ink); }
+.dp .box { fill: var(--panel); stroke: var(--wire-static); stroke-width: 1.6; }
+.dp .box.hot-s { stroke: var(--single); stroke-width: 2.4; fill: var(--single-soft); }
+.dp .box.hot-m { stroke: var(--multi); stroke-width: 2.4; fill: var(--multi-soft); }
+.dp .box.cold { stroke: var(--wire-off); }
+.dp .mux { fill: var(--panel); stroke: var(--wire-static); stroke-width: 1.4; }
+.dp .w { fill: none; stroke-width: 2.2; stroke-linejoin: round; stroke-linecap: round; }
+.dp .w.static { stroke: var(--wire-static); }
+.dp .w.off { stroke: var(--wire-off); }
+.dp .w.on-s { stroke: var(--single); stroke-width: 2.8; }
+.dp .w.on-m { stroke: var(--multi); stroke-width: 2.8; }
+.dp .flow { fill: none; stroke-width: 2.8; stroke-dasharray: 3 9; stroke-linecap: round; stroke: var(--panel); opacity: 0.85; animation: flow 0.9s linear infinite; pointer-events: none; }
+.dp .hit { fill: none; stroke: transparent; stroke-width: 10; cursor: help; }
+@keyframes flow { to { stroke-dashoffset: -12; } }
+@media (prefers-reduced-motion: reduce) { .dp .flow { animation: none; display: none; } .track .fill { transition: none; } }
+.leds { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; }
+.led { width: 10px; height: 10px; border-radius: 50%; background: var(--wire-off); }
+.led.on { background: var(--good); box-shadow: 0 0 6px var(--good); }
+.statechip { font-family: var(--f-mono); font-weight: 600; }
+
+.narr { border-left: 3px solid var(--line); padding: 6px 10px; background: var(--panel-2); border-radius: 0 8px 8px 0; min-height: 3.2em; }
+.core.s .narr { border-color: var(--single); }
+.core.m .narr { border-color: var(--multi); }
+.narr .t { font-size: 0.75rem; color: var(--muted); font-family: var(--f-mono); }
+.narr .eq { font-family: var(--f-mono); font-size: 0.88rem; display: block; margin-top: 2px; overflow-x: auto; }
+
+.regs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; }
+@media (max-width: 520px) { .regs { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.reg { display: flex; justify-content: space-between; gap: 6px; font-family: var(--f-mono); font-size: 0.78rem; padding: 2px 6px; border-radius: 5px; background: var(--panel-2); min-width: 0; overflow: hidden; }
+.reg span:first-child { color: var(--muted); }
+.reg span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.reg.changed { outline: 2px solid var(--accent); }
+.regs.bin { grid-template-columns: minmax(0, 1fr); }
+.regs.bin .reg span:last-child { font-size: 0.72rem; }
+.innerregs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; }
+@media (max-width: 520px) { .innerregs { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+.tip { position: fixed; z-index: 50; pointer-events: none; background: var(--ink); color: var(--panel); padding: 6px 9px; border-radius: 6px; font-size: 0.8rem; max-width: 280px; display: none; }
+.tip b { font-family: var(--f-mono); }
+
+.chart { width: 100%; height: auto; display: block; }
+.chart text { font-family: var(--f-mono); font-size: 11px; fill: var(--muted); }
+.chart .grid { stroke: var(--line); stroke-width: 1; }
+.chart .ls { stroke: var(--single); stroke-width: 2.5; fill: none; }
+.chart .lm { stroke: var(--multi); stroke-width: 2.5; fill: none; }
+.chart .ds { fill: var(--single); }
+.chart .dm { fill: var(--multi); }
+.chart .cur { stroke: var(--ink); stroke-dasharray: 4 4; stroke-width: 1.2; }
+.chart .flip { fill: var(--ink); opacity: 0.06; }
+.mix { display: flex; height: 18px; border-radius: 5px; overflow: hidden; border: 1px solid var(--line); }
+.mix div { height: 100%; }
+.mixlegend { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 0.8rem; margin-top: 6px; }
+.mixlegend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
+.formula { font-family: var(--f-mono); font-size: 0.88rem; background: var(--panel-2); border-radius: 8px; padding: 8px 10px; overflow-x: auto; }
+.log { font-family: var(--f-mono); font-size: 0.8rem; max-height: 220px; overflow: auto; display: grid; gap: 2px; }
+.log div { display: grid; grid-template-columns: 70px 1fr 1fr; gap: 10px; padding: 2px 4px; border-bottom: 1px dashed var(--line); }
+@media (max-width: 640px) { .log div { grid-template-columns: 60px 1fr; } }
+.log .ls { color: var(--single); }
+.log .lm { color: var(--multi); }
+
+/* ---------- learn ---------- */
+.learn { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 16px; align-items: start; }
+@media (max-width: 900px) { .learn { grid-template-columns: 1fr; } }
+.toc { position: sticky; top: 120px; display: grid; gap: 2px; }
+@media (max-width: 900px) { .toc { position: static; } }
+.toc a { text-decoration: none; color: var(--muted); padding: 4px 8px; border-radius: 6px; font-size: 0.9rem; }
+.toc a:hover { color: var(--ink); background: var(--panel); }
+.lesson { display: grid; gap: 10px; scroll-margin-top: 120px; }
+.lesson .lv { max-width: 72ch; display: grid; gap: 8px; }
+.lesson table { border-collapse: collapse; font-size: 0.88rem; }
+.lesson td, .lesson th { border: 1px solid var(--line); padding: 4px 8px; text-align: left; vertical-align: top; }
+.lesson th { background: var(--panel-2); }
+.tblwrap { overflow-x: auto; }
+.fact { border: 1px dashed var(--line); border-radius: 8px; padding: 8px 12px; font-size: 0.9rem; background: var(--panel-2); max-width: 72ch; }
+.fact b { font-family: var(--f-display); }
+.lvtag { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+pre.ascii { font-family: var(--f-mono); font-size: 0.8rem; line-height: 1.35; background: var(--panel-2); border-radius: 8px; padding: 10px; overflow-x: auto; margin: 0; }
+
+/* ---------- code ---------- */
+.editor { width: 100%; min-height: 360px; font-family: var(--f-mono); font-size: 0.88rem; line-height: 1.5; resize: vertical; tab-size: 8; }
+.listing { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+.listing th { text-align: left; font-weight: 600; font-size: 0.75rem; color: var(--muted); padding: 4px 6px; border-bottom: 1px solid var(--line); }
+.listing td { padding: 3px 6px; border-bottom: 1px dashed var(--line); font-family: var(--f-mono); white-space: nowrap; }
+.listing tr { cursor: pointer; }
+.listing tr:hover td, .listing tr.sel td { background: var(--panel-2); }
+.listing td.src { white-space: pre; color: var(--muted); }
+.err { color: var(--bad); font-weight: 600; }
+.ok { color: var(--good); font-weight: 600; }
+.f-op { color: #8a3ffc; } .f-rs { color: #0f62fe; } .f-rt { color: #198038; } .f-rd { color: #b8590a; } .f-sh { color: var(--muted); } .f-fn { color: #d02670; } .f-imm { color: #007d79; } .f-tg { color: #6929c4; }
+:root[data-theme="dark"] .f-op, :root:not([data-theme="light"]) .f-op { }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .f-op { color: #be95ff; } :root:not([data-theme="light"]) .f-rs { color: #78a9ff; } :root:not([data-theme="light"]) .f-rt { color: #6fdc8c; } :root:not([data-theme="light"]) .f-rd { color: #ffb36b; } :root:not([data-theme="light"]) .f-fn { color: #ff7eb6; } :root:not([data-theme="light"]) .f-imm { color: #3ddbd9; } :root:not([data-theme="light"]) .f-tg { color: #d4bbff; } }
+:root[data-theme="dark"] .f-op { color: #be95ff; } :root[data-theme="dark"] .f-rs { color: #78a9ff; } :root[data-theme="dark"] .f-rt { color: #6fdc8c; } :root[data-theme="dark"] .f-rd { color: #ffb36b; } :root[data-theme="dark"] .f-fn { color: #ff7eb6; } :root[data-theme="dark"] .f-imm { color: #3ddbd9; } :root[data-theme="dark"] .f-tg { color: #d4bbff; }
+
+.fields { display: flex; flex-wrap: wrap; gap: 4px; }
+.field { border: 1px solid var(--line); border-radius: 6px; padding: 4px 6px; display: grid; justify-items: center; min-width: 54px; background: var(--panel-2); }
+.field .b { font-family: var(--f-mono); font-size: 0.85rem; letter-spacing: 0.04em; }
+.field .n { font-size: 0.7rem; color: var(--muted); }
+.field .v { font-family: var(--f-mono); font-size: 0.8rem; font-weight: 600; }
+
+/* ---------- bits ---------- */
+.bitgrid { display: grid; grid-template-columns: repeat(32, minmax(0, 1fr)); gap: 2px; }
+@media (max-width: 760px) { .bitgrid { grid-template-columns: repeat(16, minmax(0, 1fr)); } }
+.bit { border: 1px solid var(--line); background: var(--panel-2); border-radius: 4px; padding: 6px 0 2px; text-align: center; cursor: pointer; font-family: var(--f-mono); font-size: 0.9rem; display: grid; }
+.bit small { font-size: 0.6rem; color: var(--muted); }
+.bit.one { background: var(--ink); color: var(--panel); border-color: var(--ink); }
+.bit.one small { color: var(--panel); opacity: 0.7; }
+.bit.sign { box-shadow: inset 0 -3px 0 var(--bad); }
+.convout { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 6px 12px; align-items: center; }
+.convout .v { font-family: var(--f-mono); overflow-x: auto; white-space: nowrap; }
+
+/* ---------- quiz ---------- */
+.q { display: grid; gap: 10px; }
+.q .opts { display: grid; gap: 6px; }
+.q .opts .btn { justify-content: flex-start; text-align: left; font-family: var(--f-mono); }
+.q .opts .btn.right { border-color: var(--good); background: color-mix(in srgb, var(--good) 14%, var(--panel)); }
+.q .opts .btn.wrong { border-color: var(--bad); background: color-mix(in srgb, var(--bad) 12%, var(--panel)); }
+.explain { border-left: 3px solid var(--accent); padding: 6px 10px; background: var(--panel-2); }
+
+/* ---------- board ---------- */
+.boardpic { display: grid; gap: 12px; align-content: start; }
+.sws { display: grid; grid-template-columns: repeat(16, minmax(0, 1fr)); gap: 4px; }
+.sw { display: grid; justify-items: center; gap: 4px; font-size: 0.65rem; font-family: var(--f-mono); color: var(--muted); }
+.sw .body { width: 100%; max-width: 22px; height: 40px; border-radius: 4px; background: var(--panel-2); border: 1px solid var(--line); position: relative; }
+.sw .knob { position: absolute; left: 2px; right: 2px; height: 16px; border-radius: 3px; background: var(--wire-static); bottom: 2px; }
+.sw.up .knob { top: 2px; bottom: auto; background: var(--ink); }
+.sw.use .body { border-color: var(--accent); }
+.kv { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 14px; font-size: 0.9rem; }
+.kv dt { color: var(--muted); }
+.kv dd { margin: 0; font-family: var(--f-mono); }
+table.plain { border-collapse: collapse; width: 100%; font-size: 0.88rem; }
+table.plain td, table.plain th { border-bottom: 1px solid var(--line); padding: 5px 8px; text-align: left; }
+table.plain th { color: var(--muted); font-weight: 600; font-size: 0.78rem; }
+.foot { color: var(--muted); font-size: 0.8rem; padding-top: 24px; }
+</style>
+
+<header class="top">
+  <div class="top-inner">
+    <div class="brand">
+      <h1>CPU Race Lab <span class="s">●</span><span class="m">●</span></h1>
+      <span>single-cycle vs multicycle MIPS · Nexys A7</span>
+    </div>
+    <div class="ctl-group">
+      <span class="ctl-label" id="lbl-base">เลขฐาน</span>
+      <div class="seg" role="group" aria-labelledby="lbl-base" id="base-seg">
+        <button type="button" data-base="hex" aria-pressed="true">HEX</button>
+        <button type="button" data-base="dec" aria-pressed="false">DEC</button>
+        <button type="button" data-base="sdec" aria-pressed="false">±DEC</button>
+        <button type="button" data-base="bin" aria-pressed="false">BIN</button>
+      </div>
+    </div>
+    <div class="ctl-group">
+      <span class="ctl-label" id="lbl-level">คำอธิบาย</span>
+      <div class="seg" role="group" aria-labelledby="lbl-level" id="level-seg">
+        <button type="button" data-level="easy" aria-pressed="true">ง่าย</button>
+        <button type="button" data-level="class" aria-pressed="false">ห้องเรียน</button>
+        <button type="button" data-level="deep" aria-pressed="false">ลงลึก</button>
+      </div>
+    </div>
+  </div>
+  <nav class="tabs" aria-label="ส่วนของเว็บ">
+    <a href="#race" data-tab="race">แข่ง</a>
+    <a href="#learn" data-tab="learn">บทเรียน</a>
+    <a href="#code" data-tab="code">เขียนโปรแกรม</a>
+    <a href="#bits" data-tab="bits">เลขฐาน &amp; ถอดรหัส</a>
+    <a href="#quiz" data-tab="quiz">แบบฝึก</a>
+    <a href="#board" data-tab="board">บนบอร์ด</a>
+  </nav>
+</header>
+
+<main class="wrap">
+
+<!-- ======================================================= RACE -->
+<section class="page" id="page-race" aria-label="แข่ง">
+  <div class="card controls">
+    <div class="ctl-block">
+      <label class="ctl-label" for="prog">โปรแกรม</label>
+      <select id="prog"></select>
+      <p class="small muted" id="prog-desc"></p>
+    </div>
+    <div class="ctl-block">
+      <label class="ctl-label" for="ov">overhead ของ register (ov)</label>
+      <div class="ovline"><input type="range" id="ov" min="0" max="15" value="0"><span class="ovval num" id="ov-val">0</span></div>
+      <div class="tlegend num">
+        <span style="color:var(--single)">single</span><span>1 คำสั่ง = 50 + ov = <b id="ts">50</b> หน่วย</span>
+        <span style="color:var(--multi)">multi</span><span>1 step = 10 + ov = <b id="tm">10</b> หน่วย</span>
+      </div>
+    </div>
+    <div class="ctl-block">
+      <span class="ctl-label">ควบคุม</span>
+      <div class="row">
+        <button class="btn" type="button" id="b-reset" title="เริ่มใหม่ (เหมือน BTNL)">⟲ เริ่มใหม่</button>
+        <button class="btn primary" type="button" id="b-step" title="กระโดดไปเหตุการณ์ถัดไป (เหมือน BTNC)">▸ ทีละจังหวะ</button>
+        <button class="btn" type="button" id="b-run" title="วิ่งเอง (เหมือน BTNR)">▶ วิ่ง</button>
+        <button class="btn" type="button" id="b-end" title="ข้ามไปจบ">⏭ จบเลย</button>
+        <label class="small muted" for="speed">ความเร็ว</label>
+        <select id="speed">
+          <option value="50">50 หน่วย/วิ</option>
+          <option value="200" selected>200 หน่วย/วิ</option>
+          <option value="600">600 หน่วย/วิ</option>
+          <option value="2000">2000 หน่วย/วิ</option>
+        </select>
+      </div>
+      <div class="predict" id="predict">
+        <span class="muted">ทายก่อนเริ่ม: ใครชนะ?</span>
+        <button class="btn" type="button" data-guess="s">single</button>
+        <button class="btn" type="button" data-guess="m">multi</button>
+        <button class="btn" type="button" data-guess="t">เสมอ</button>
+        <span id="guess-result" class="small"></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card scoreboard">
+    <div class="sb-top">
+      <div class="sevenwrap"><div class="seven" id="seg-time" aria-label="เวลาร่วม"></div><small>TIME (hex เหมือนบนจอบอร์ด) · <span class="num" id="time-dec">0</span> หน่วย</small></div>
+      <p class="small muted" id="sb-hint" style="max-width:60ch"></p>
+    </div>
+    <div class="lane s">
+      <span class="lane-name">SINGLE</span>
+      <div class="track"><div class="fill" id="fill-s"></div><div class="ghost" id="ghost-s" title="เวลาจบที่คาดไว้"></div></div>
+      <div class="lane-r num"><span id="t-s">0</span><span class="muted" id="r-s">0 คำสั่ง</span><span class="badge run" id="st-s">วิ่ง</span></div>
+    </div>
+    <div class="lane m">
+      <span class="lane-name">MULTI</span>
+      <div class="track"><div class="fill" id="fill-m"></div><div class="ghost" id="ghost-m" title="เวลาจบที่คาดไว้"></div></div>
+      <div class="lane-r num"><span id="t-m">0</span><span class="muted" id="r-m">0 คำสั่ง</span><span class="badge run" id="st-m">วิ่ง</span></div>
+    </div>
+  </div>
+
+  <div class="grid2">
+    <div class="card core s" id="core-s">
+      <div class="core-head">
+        <h2>Single-cycle</h2>
+        <span class="chip s">1 clock ต่อคำสั่ง · CPI = 1</span>
+      </div>
+      <div class="next-ins"><span class="lbl">คำสั่งที่กำลังจะทำ</span><span id="next-s"></span></div>
+      <svg class="dp" id="dp-s" viewBox="0 14 320 296" role="img" aria-label="datapath single-cycle"></svg>
+      <div class="narr" id="narr-s" aria-live="polite"></div>
+      <div class="regs" id="regs-s"></div>
+    </div>
+    <div class="card core m" id="core-m">
+      <div class="core-head">
+        <h2>Multicycle</h2>
+        <span class="chip m statechip" id="state-m">S0 FETCH</span>
+        <div class="leds" id="leds-m" title="LED[11:0] บนบอร์ด: state ของ multicycle"></div>
+      </div>
+      <div class="next-ins"><span class="lbl">คำสั่งใน IR</span><span id="next-m"></span></div>
+      <svg class="dp" id="dp-m" viewBox="0 14 320 296" role="img" aria-label="datapath multicycle"></svg>
+      <div class="narr" id="narr-m" aria-live="polite"></div>
+      <div class="innerregs" id="inner-m"></div>
+      <div class="regs" id="regs-m"></div>
+    </div>
+  </div>
+
+  <div class="grid2">
+    <div class="card">
+      <h3>ผลแข่งที่ทุกค่า ov (โปรแกรมนี้)</h3>
+      <svg class="chart" id="chart" viewBox="0 0 520 260" role="img" aria-label="กราฟเวลาจบเทียบ ov"></svg>
+      <p class="small muted" id="chart-note"></p>
+    </div>
+    <div class="card" style="display:grid;gap:10px">
+      <h3>ทำไมถึงชนะ: เวลา = IC × CPI × T</h3>
+      <div class="formula num" id="formula"></div>
+      <div>
+        <span class="ctl-label">สัดส่วนคำสั่ง (ยิ่งมี lw เยอะ CPI ของ multi ยิ่งสูง)</span>
+        <div class="mix" id="mix"></div>
+        <div class="mixlegend" id="mixlegend"></div>
+      </div>
+      <div>
+        <span class="ctl-label">เหตุการณ์ล่าสุด</span>
+        <div class="log" id="log"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ======================================================= LEARN -->
+<section class="page" id="page-learn" aria-label="บทเรียน">
+  <div class="learn">
+    <nav class="card toc" id="toc" aria-label="สารบัญบทเรียน"></nav>
+    <div style="display:grid;gap:16px;min-width:0" id="lessons"></div>
+  </div>
+</section>
+
+<!-- ======================================================= CODE -->
+<section class="page" id="page-code" aria-label="เขียนโปรแกรม">
+  <div class="grid2">
+    <div class="card" style="display:grid;gap:10px">
+      <div class="row" style="justify-content:space-between">
+        <h2>เขียน assembly</h2>
+        <div class="row">
+          <label class="small muted" for="code-load">เริ่มจาก</label>
+          <select id="code-load"></select>
+        </div>
+      </div>
+      <textarea class="editor" id="editor" spellcheck="false" aria-label="โค้ด assembly"></textarea>
+      <div class="row">
+        <button class="btn primary" type="button" id="b-asm">แปลงเป็น machine code</button>
+        <button class="btn" type="button" id="b-torace">ส่งไปแข่ง →</button>
+        <span id="asm-status" class="small"></span>
+      </div>
+      <details class="small">
+        <summary>ไวยากรณ์ที่ใช้ได้</summary>
+        <div class="tblwrap"><table class="plain">
+          <tr><th>คำสั่ง</th><th>ตัวอย่าง</th></tr>
+          <tr><td>add sub and or slt</td><td class="mono">add $t2, $t0, $t1</td></tr>
+          <tr><td>addi</td><td class="mono">addi $t0, $zero, -5</td></tr>
+          <tr><td>lw sw</td><td class="mono">lw $t0, 4($t1) · sw $t0, x($zero)</td></tr>
+          <tr><td>beq j</td><td class="mono">beq $t0, $zero, done · j loop</td></tr>
+          <tr><td>ช่วย</td><td class="mono">nop · halt</td></tr>
+          <tr><td>ข้อมูล</td><td class="mono">.data · x: .word 1, 2 · buf: .space 16 · .text</td></tr>
+          <tr><td>เช็กผล</td><td class="mono">#! expect $t0 = 15 · #! expect mem[x] = 3</td></tr>
+        </table></div>
+        <p class="muted">lw/sw ต้องอ้าง address 0x400–0x7FF (ส่วน .data) และต้องจบโปรแกรมด้วย halt</p>
+      </details>
+    </div>
+    <div class="card" style="display:grid;gap:10px;align-content:start">
+      <h2>Machine code</h2>
+      <div class="fields" id="code-fields"></div>
+      <div class="tblwrap" style="max-height:420px;overflow:auto"><table class="listing" id="listing"></table></div>
+      <div id="code-result"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ======================================================= BITS -->
+<section class="page" id="page-bits" aria-label="เลขฐานและถอดรหัส">
+  <div class="card" style="display:grid;gap:12px">
+    <div class="row" style="justify-content:space-between">
+      <h2>เลข 32 bit หนึ่งตัว มองได้หลายแบบ</h2>
+      <div class="row">
+        <label class="small muted" for="conv-in">พิมพ์ค่า</label>
+        <input type="text" id="conv-in" value="-5" style="width:12rem" aria-describedby="conv-help">
+        <button class="btn" type="button" id="conv-neg">กลับเครื่องหมาย</button>
+        <button class="btn" type="button" id="conv-rand">สุ่ม</button>
+      </div>
+    </div>
+    <p class="small muted" id="conv-help">รับ <code>42</code>, <code>-5</code>, <code>0x2A</code>, <code>0b101010</code> · คลิกที่ bit เพื่อสลับ 0/1 · bit 31 (ขีดแดง) คือบิตเครื่องหมาย</p>
+    <div class="bitgrid" id="bitgrid"></div>
+    <div class="convout" id="convout"></div>
+    <div class="explain small" id="conv-explain"></div>
+  </div>
+  <div class="grid2">
+    <div class="card" style="display:grid;gap:10px;align-content:start">
+      <h2>ถอดรหัสคำสั่ง</h2>
+      <div class="row">
+        <label class="small muted" for="dec-in">machine code</label>
+        <input type="text" id="dec-in" value="0x8c080400" style="width:12rem">
+        <button class="btn" type="button" id="dec-rand">สุ่มคำสั่ง</button>
+      </div>
+      <div class="fields" id="dec-fields"></div>
+      <div id="dec-out"></div>
+    </div>
+    <div class="card" style="display:grid;gap:10px;align-content:start">
+      <h2>sign-extend 16 → 32 bit</h2>
+      <p class="small muted">immediate ของ addi / lw / sw / beq มีแค่ 16 bit ก่อนใช้ต้องขยายเป็น 32 bit โดยก๊อปบิตเครื่องหมาย (bit 15) ไปเติมด้านซ้าย</p>
+      <div class="row">
+        <label class="small muted" for="se-in">immediate 16 bit</label>
+        <input type="text" id="se-in" value="0xfffb" style="width:10rem">
+      </div>
+      <div id="se-out"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ======================================================= QUIZ -->
+<section class="page" id="page-quiz" aria-label="แบบฝึก">
+  <div class="card" style="display:grid;gap:12px">
+    <div class="row" style="justify-content:space-between">
+      <h2>แบบฝึก (สุ่มใหม่ได้ไม่จำกัด)</h2>
+      <div class="row">
+        <span class="chip" id="score">ทำถูก 0 / 0</span>
+        <label class="small muted" for="qtype">ประเภท</label>
+        <select id="qtype">
+          <option value="any">คละ</option>
+          <option value="enc">แปลงคำสั่งเป็น hex</option>
+          <option value="dec">ถอด hex เป็นคำสั่ง</option>
+          <option value="steps">นับ step ของ multicycle</option>
+          <option value="race">ทายผู้ชนะ</option>
+          <option value="concept">แนวคิด</option>
+        </select>
+        <button class="btn primary" type="button" id="q-next">ข้อใหม่</button>
+      </div>
+    </div>
+    <div class="q" id="q"></div>
+  </div>
+</section>
+
+<!-- ======================================================= BOARD -->
+<section class="page" id="page-board" aria-label="บนบอร์ด">
+  <div class="grid2">
+    <div class="card boardpic">
+      <h2>ตั้งสวิตช์บนบอร์ดให้ได้ผลเหมือนในเว็บ</h2>
+      <div class="row">
+        <label class="small muted" for="bd-prog">โปรแกรม</label>
+        <select id="bd-prog"><option value="0">A: บวก 1..10</option><option value="1">B: รวม array</option></select>
+        <label class="small muted" for="bd-ov">ov</label>
+        <input type="number" id="bd-ov" min="0" max="15" value="4" style="width:4.5rem">
+        <label class="small muted" for="bd-mode">โหมด</label>
+        <select id="bd-mode"><option value="1">run (วิ่งเอง)</option><option value="0">step (กดทีละจังหวะ)</option></select>
+      </div>
+      <div class="sws" id="sws" aria-label="สวิตช์ SW15 ถึง SW0"></div>
+      <ol class="small" id="bd-steps" style="margin:0;padding-left:1.2rem;display:grid;gap:4px"></ol>
+      <dl class="kv" id="bd-expect"></dl>
+    </div>
+    <div class="card" style="display:grid;gap:10px;align-content:start">
+      <h2>ปุ่ม ไฟ และจอ</h2>
+      <table class="plain">
+        <tr><th>บนบอร์ด</th><th>ทำอะไร</th></tr>
+        <tr><td>BTNC (กลาง)</td><td>step: กระโดดไปเหตุการณ์ถัดไป (SW15 ลง)</td></tr>
+        <tr><td>BTNR (ขวา)</td><td>วิ่ง / หยุด (SW15 ขึ้น)</td></tr>
+        <tr><td>BTNL (ซ้าย)</td><td>โหลดโปรแกรมใหม่ เวลากลับเป็น 0</td></tr>
+        <tr><td>BTNU (บน)</td><td>7-seg สลับ จำนวนคำสั่ง ↔ เวลา</td></tr>
+        <tr><td>CPU_RESETN (แดง)</td><td>reset ทั้งระบบ แล้วโหลดโปรแกรมเอง</td></tr>
+        <tr><td>SW3–0</td><td>ov 0–15</td></tr>
+        <tr><td>SW4</td><td>โปรแกรม A (ลง) / B (ขึ้น) มีผลตอนกด BTNL</td></tr>
+        <tr><td>SW14–12</td><td>ความเร็ว 0=20 · 1=50 · 2=100 · 3=200 · 4=400 · 5=1000 · 6=4000 หน่วย/วิ · 7=เร็วสุด</td></tr>
+        <tr><td>SW15</td><td>ลง = step · ขึ้น = run</td></tr>
+        <tr><td>LED15 / LED14</td><td>single จบ / multi จบ</td></tr>
+        <tr><td>LED13 / LED12</td><td>กำลังวิ่ง / โหลดโปรแกรม B อยู่</td></tr>
+        <tr><td>LED11–0</td><td>state ของ multicycle (S0–S11 ติดทีละดวง)</td></tr>
+        <tr><td>7-seg ซ้าย 4 หลัก</td><td>single (จำนวนคำสั่งหรือเวลา, hex)</td></tr>
+        <tr><td>7-seg ขวา 4 หลัก</td><td>multi</td></tr>
+      </table>
+      <p class="small muted">เว็บนี้ยังไม่ได้คุยกับบอร์ดผ่าน USB โดยตรง (วงจรบนบอร์ดยังไม่มีส่วน UART) แต่ตัวจำลองในเว็บถูกทดสอบแล้วว่าให้ตัวเลขตรงกับวงจรบนบอร์ดทุกจังหวะ</p>
+    </div>
+  </div>
+</section>
+
+<p class="foot">CPU Race · Computer Architecture CoE KKU · ตัวจำลองในเว็บ (engine.js) ทดสอบเทียบกับ Verilog, ref_model.py และ cpuSim ของอาจารย์ด้วย <code>node sim/test_web.js</code></p>
+</main>
+
+<div class="tip" id="tip" role="tooltip"></div>
+
+<script src="engine.js"></script>
+<script src="programs.js"></script>
+<script src="geometry.js"></script>
+<script src="app.js"></script>
+
+</body>
+</html>

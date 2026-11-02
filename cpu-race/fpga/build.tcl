@@ -64,14 +64,12 @@ report_utilization    -file utilization.rpt
 report_drc            -file drc.rpt
 report_methodology    -file methodology.rpt
 
-# สรุปจำนวน warning/critical warning/error ให้อ่านง่าย
+# สรุปสั้นๆ (จำนวน warning ให้ดูจาก vivado.log: ค้นคำว่า "WARNING:" และ "CRITICAL WARNING:")
 set fh [open messages_summary.txt w]
-foreach sev {ERROR {CRITICAL WARNING} WARNING} {
-    if {[catch {get_msg_config -count -severity $sev} n]} { set n "?" }
-    puts $fh "$sev: $n"
-}
 if {[catch {get_property SLACK [get_timing_paths -max_paths 1 -nworst 1 -setup]} wns]} { set wns "?" }
-puts $fh "WNS (setup slack, ns): $wns"
+if {[catch {get_property SLACK [get_timing_paths -max_paths 1 -nworst 1 -hold]} whs]} { set whs "?" }
+puts $fh "WNS (setup slack, ns): $wns   (ต้อง >= 0)"
+puts $fh "WHS (hold slack, ns):  $whs   (ต้อง >= 0)"
 close $fh
 
 write_bitstream -force ${top}.bit

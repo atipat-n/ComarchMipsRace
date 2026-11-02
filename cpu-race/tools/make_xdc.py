@@ -44,6 +44,10 @@ def build(target):
     missing = wanted - found
     if missing:
         sys.exit(f"ไม่พบ port ใน master: {sorted(missing)}")
+    # bank 0 ของ Nexys A7 ใช้ 3.3 V (แก้ DRC CFGBVS-1)
+    out.append("\n## Configuration bank voltage\n"
+               "set_property CFGBVS VCCO [current_design]\n"
+               "set_property CONFIG_VOLTAGE 3.3 [current_design]\n")
     path = ROOT / "constr" / spec["out"]
     path.write_text("".join(out), encoding="utf-8")
     print(f"wrote {path.relative_to(ROOT)}")

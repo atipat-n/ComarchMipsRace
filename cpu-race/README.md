@@ -1,5 +1,7 @@
 # CPU Race: Single-cycle vs Multicycle MIPS บน Nexys A7-100T
 
+**เว็บ CPU Race Lab:** ดับเบิลคลิก [`web/index.html`](web/index.html) (ไม่ต้องต่อเน็ต) ดู single vs multi แข่งกัน, บทเรียน, เขียนโปรแกรม, เลขฐาน, แบบฝึก และวิธีตั้งสวิตช์บนบอร์ด
+
 | อ่านอะไร | เมื่อไร |
 |---|---|
 | [`docs/tutorial.md`](docs/tutorial.md) | เพิ่งเริ่ม อยากเข้าใจว่า CPU, single-cycle, multicycle คืออะไร |

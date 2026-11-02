@@ -30,8 +30,9 @@
 | cpuSim | **ได้ไฟล์แล้ว** อยู่ใน `Slide/ExampleFromProf/` (รุ่น `main32V7`) ตัดสินใจวิธีใช้แล้วในหัวข้อ 2.3 |
 | ที่อยู่โปรเจค | **`D:\Comarch2\Project\cpu-race\`** (ย้ายเข้า `Project/` ตามที่ผู้ใช้ขอ 2 พ.ย.) สไลด์และไฟล์ของอาจารย์ยังอยู่ที่ `D:\Comarch2\Slide\` |
 | ทำแล้ว (2 พ.ย.) | **ทั้งระบบเสร็จใน simulation:** single + multi + race_ctrl + boot ROM/loader + ปุ่ม/7-seg/LED + VGA (ภาพ datapath สร้างด้วยโค้ด, ตัวหนังสือ, แถบแข่ง) รวมใน `rtl/top.v` · `python sim/run_all.py` = ALL PASS: เทียบ 4 ทาง (ref_model, cpuSim ของอาจารย์, single, multi) + จำลองทั้งบอร์ดแข่ง demo A/B 6 กรณี เวลาจบตรงสูตร · ภาพจอจริงจาก simulation อยู่ใน `build/frames/` · เอกสาร: `manual.md`, `tutorial.md`, `wire_map.md`, `demo_script.md` |
-| **ยังไม่ได้ทดสอบ** | **ยังไม่เคย build บน Vivado** (เครื่องผู้ใช้ไม่มี): MMCM ใน `clk_gen.v`, timing ที่ 25 MHz, การ infer BRAM/LUTRAM, ขา VGA จะรู้ผลตอนเพื่อนรัน `fpga\run.bat top` |
-| ขั้นต่อไป | เพื่อนรัน `fpga\run.bat smoke program` แล้ว `fpga\run.bat top program` → ส่ง `build/<target>/` กลับมาอ่าน → แก้ตาม log → ซ้อมตาม `docs/demo_script.md` → อัดคลิปสำรอง · (stretch) UART + เว็บ |
+| **บอร์ดจริง (2 พ.ย.)** | ✅ `fpga\run.bat top program` บน Vivado 2025.2 ผ่าน: 0 error, 0 critical warning, **WNS +19.195 ns / WHS +0.134 ns** ที่ 25 MHz, LUT 4115 (6.5%), FF 2781, LUTRAM 691, **BRAM 44/135**, MMCM 1, IOB 61 · โหลดลงบอร์ดสำเร็จ **ผู้ใช้ยืนยันว่ารันได้และขึ้นจอได้** · warning ที่เหลือ: ขา MMCM ที่ไม่ได้ใช้ (ไม่มีผล), SYNTH-6 BRAM ไม่มี output register (ไม่มีผลที่ 25 MHz), DRC CFGBVS-1 (แก้ใน xdc แล้วหลัง build นี้) |
+| เว็บ (2 พ.ย.) | ✅ `web/` = CPU Race Lab ใช้แบบ offline (เปิด `web/index.html`): แข่ง + datapath ภาพเดียวกับ VGA, บทเรียน 3 ระดับ, assembler, เลขฐาน/ถอดรหัส, แบบฝึกสุ่ม, คู่มือตั้งสวิตช์บนบอร์ด · `engine.js` ทดสอบเทียบกับ asm/ref_model/RTL ใน `run_all.py` · **ยังไม่มี Web Serial** เพราะวงจรยังไม่มี UART (D4 ทำได้แค่ส่วน "โหมด Mock") |
+| ขั้นต่อไป | ไล่เช็กบนบอร์ดตาม `docs/demo_script.md` (ตัวเลขต้องตรงตาราง) → ซ้อม → อัดคลิปสำรอง · (ทางเลือก) เขียน flash ให้บอร์ด boot เอง · (stretch) UART ในวงจร + Web Serial ในเว็บ |
 
 **กติกาการทำงานช่วงนี้ (สำหรับ AI และทีม):**
 - ทำงานในโฟลเดอร์ `Project/cpu-race/` ตามโครงในหัวข้อ 13 **ไม่ต้อง `git init` ไม่ต้อง commit หรือ push** จนกว่าผู้ใช้จะสั่ง

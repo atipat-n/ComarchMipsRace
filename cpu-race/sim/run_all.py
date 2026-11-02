@@ -205,10 +205,27 @@ def main(argv):
 
     if cores_ok and not argv:
         fails += run_race_tests(iverilog, vvp)
+    if not argv:
+        fails += run_web_tests()
 
     print("-" * 60)
     print("ALL PASS" if fails == 0 else f"{fails} FAIL")
     return 1 if fails else 0
+
+
+def run_web_tests():
+    """เทียบ web/engine.js กับผลข้างบน (ต้องมี Node.js)"""
+    node = shutil.which("node")
+    if not node:
+        print("[skip] ไม่พบ node: ข้ามการทดสอบ web/engine.js")
+        return 0
+    subprocess.run([sys.executable, str(ROOT / "tools" / "build_web.py")], capture_output=True, check=True)
+    r = subprocess.run([node, str(ROOT / "sim" / "test_web.js")], capture_output=True, text=True, encoding="utf-8")
+    ok = r.returncode == 0
+    print(f"[{'PASS' if ok else 'FAIL'}] web/engine.js เทียบกับ asm/ref_model/RTL ({r.stdout.count('[PASS]')} รายการ)")
+    if not ok:
+        print("\n".join(l for l in r.stdout.splitlines() if "FAIL" in l))
+    return 0 if ok else 1
 
 
 RACE_CASES = [("A", 0), ("A", 5), ("A", 6), ("B", 3), ("B", 4), ("B", 15)]
